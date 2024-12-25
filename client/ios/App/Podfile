@@ -24,10 +24,14 @@ def capacitor_pods
   pod 'CordovaPlugins', :path => '../capacitor-cordova-ios-plugins'
 end
 
-target 'App' do
+target 'Audiobookshelf' do
   capacitor_pods
   # Add your Pods here
+  
+  pod 'RealmSwift', '~> 10'
+  pod 'Alamofire', '~> 5.5'
 end
+
 
 post_install do |installer|
   assertDeploymentTarget(installer)
