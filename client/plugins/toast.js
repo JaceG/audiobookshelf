@@ -4,7 +4,7 @@ import "vue-toastification/dist/index.css"
 
 const options = {
   hideProgressBar: true,
-  draggable: false
+  position: 'bottom-center'
 }
 
 Vue.use(Toast, options)

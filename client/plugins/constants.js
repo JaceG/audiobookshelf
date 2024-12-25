@@ -1,12 +1,3 @@
-const SupportedFileTypes = {
-  image: ['png', 'jpg', 'jpeg', 'webp'],
-  audio: ['m4b', 'mp3', 'm4a', 'flac', 'opus', 'ogg', 'oga', 'mp4', 'aac', 'wma', 'aiff', 'wav', 'webm', 'webma', 'mka', 'awb', 'caf', 'mpeg', 'mpg'],
-  ebook: ['epub', 'pdf', 'mobi', 'azw3', 'cbr', 'cbz'],
-  info: ['nfo'],
-  text: ['txt'],
-  metadata: ['opf', 'abs', 'xml', 'json']
-}
-
 const DownloadStatus = {
   PENDING: 0,
   READY: 1,
@@ -14,15 +5,20 @@ const DownloadStatus = {
   FAILED: 3
 }
 
+const SyncStatus = {
+  UNSET: 0,
+  SUCCESS: 1,
+  FAILED: 2
+}
+
+const CoverDestination = {
+  METADATA: 0,
+  AUDIOBOOK: 1
+}
+
 const BookCoverAspectRatio = {
   STANDARD: 0,
   SQUARE: 1
-}
-
-const BookshelfView = {
-  STANDARD: 0,
-  DETAIL: 1,
-  AUTHOR: 2 // Books shown on author page
 }
 
 const PlayMethod = {
@@ -32,58 +28,28 @@ const PlayMethod = {
   LOCAL: 3
 }
 
-const SleepTimerTypes = {
-  COUNTDOWN: 'countdown',
-  CHAPTER: 'chapter'
+const PlayerState = {
+  IDLE: 0,
+  BUFFERING: 1,
+  READY: 2,
+  ENDED: 3
 }
 
 const Constants = {
-  SupportedFileTypes,
   DownloadStatus,
+  SyncStatus,
+  CoverDestination,
   BookCoverAspectRatio,
-  BookshelfView,
   PlayMethod,
-  SleepTimerTypes
+  PlayerState
 }
 
-const KeyNames = {
-  27: 'Escape',
-  32: 'Space',
-  37: 'ArrowLeft',
-  38: 'ArrowUp',
-  39: 'ArrowRight',
-  40: 'ArrowDown',
-  76: 'KeyL',
-  77: 'KeyM'
-}
-const Hotkeys = {
-  AudioPlayer: {
-    PLAY_PAUSE: 'Space',
-    JUMP_FORWARD: 'ArrowRight',
-    JUMP_BACKWARD: 'ArrowLeft',
-    VOLUME_UP: 'ArrowUp',
-    VOLUME_DOWN: 'ArrowDown',
-    MUTE_UNMUTE: 'KeyM',
-    SHOW_CHAPTERS: 'KeyL',
-    INCREASE_PLAYBACK_RATE: 'Shift-ArrowUp',
-    DECREASE_PLAYBACK_RATE: 'Shift-ArrowDown',
-    CLOSE: 'Escape'
-  },
-  EReader: {
-    NEXT_PAGE: 'ArrowRight',
-    PREV_PAGE: 'ArrowLeft',
-    CLOSE: 'Escape'
-  },
-  Modal: {
-    NEXT_PAGE: 'ArrowRight',
-    PREV_PAGE: 'ArrowLeft',
-    CLOSE: 'Escape'
-  }
+export {
+  PlayMethod,
+  PlayerState,
+  BookCoverAspectRatio
 }
 
-export { Constants }
 export default ({ app }, inject) => {
   inject('constants', Constants)
-  inject('keynames', KeyNames)
-  inject('hotkeys', Hotkeys)
 }

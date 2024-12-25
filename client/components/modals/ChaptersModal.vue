@@ -1,18 +1,28 @@
 <template>
-  <modals-modal v-model="show" name="chapters" :width="600" :height="'unset'">
-    <div id="chapter-modal-wrapper" ref="container" class="w-full rounded-lg bg-bg box-shadow-md overflow-y-auto overflow-x-hidden" style="max-height: 80vh">
-      <template v-for="chap in chapters">
-        <div :key="chap.id" :id="`chapter-row-${chap.id}`" class="flex items-center px-6 py-3 justify-start cursor-pointer relative" :class="chap.id === currentChapterId ? 'bg-yellow-400/20 hover:bg-yellow-400/10' : chap.end / _playbackRate <= currentChapterStart ? 'bg-success/10 hover:bg-success/5' : 'hover:bg-primary/10'" @click="clickChapter(chap)">
-          <p class="chapter-title truncate text-sm md:text-base">
-            {{ chap.title }}
-          </p>
-          <span class="font-mono text-xxs sm:text-xs text-gray-400 pl-2 whitespace-nowrap">{{ $elapsedPrettyExtended((chap.end - chap.start) / _playbackRate) }}</span>
-          <span class="flex-grow" />
-          <span class="font-mono text-xs sm:text-sm text-gray-300">{{ $secondsToTimestamp(chap.start / _playbackRate) }}</span>
+  <modals-modal v-model="show" :width="400" height="100%">
+    <template #outer>
+      <div v-if="currentChapter" class="absolute top-10 left-4 z-40 pt-1" style="max-width: 80%">
+        <p class="text-white text-lg truncate">{{ chapters.length }} {{ $strings.LabelChapters }}</p>
+      </div>
+    </template>
 
-          <div v-show="chap.id === currentChapterId" class="w-0.5 h-full absolute top-0 left-0 bg-yellow-400" />
-        </div>
-      </template>
+    <div class="w-full h-full overflow-hidden absolute top-0 left-0 flex items-center justify-center" @click="show = false">
+      <div ref="container" class="w-full overflow-x-hidden overflow-y-auto bg-secondary rounded-lg border border-fg/20" style="max-height: 75%" @click.stop>
+        <ul class="h-full w-full" role="listbox" aria-labelledby="listbox-label">
+          <template v-for="chapter in chapters">
+            <li :key="chapter.id" :id="`chapter-row-${chapter.id}`" class="text-fg select-none relative py-4 cursor-pointer" :class="currentChapterId === chapter.id ? 'bg-primary bg-opacity-80' : ''" role="option" @click="clickedOption(chapter)">
+              <div class="relative flex items-center pl-3 pr-20">
+                <p class="font-normal block truncate text-sm text-fg/80">{{ chapter.title }}</p>
+                <div class="absolute top-0 right-3 -mt-0.5">
+                  <span class="font-mono text-fg-muted leading-3 text-sm" style="letter-spacing: -0.5px">{{ $secondsToTimestamp(chapter.start / _playbackRate) }}</span>
+                </div>
+              </div>
+
+              <div v-show="chapter.id === currentChapterId" class="w-0.5 h-full absolute top-0 left-0 bg-yellow-400" />
+            </li>
+          </template>
+        </ul>
+      </div>
     </div>
   </modals-modal>
 </template>
@@ -34,6 +44,13 @@ export default {
   data() {
     return {}
   },
+  watch: {
+    value(newVal) {
+      if (newVal) {
+        this.$nextTick(this.scrollToChapter)
+      }
+    }
+  },
   computed: {
     show: {
       get() {
@@ -48,43 +65,30 @@ export default {
       return this.playbackRate
     },
     currentChapterId() {
-      return this.currentChapter?.id || null
+      return this.currentChapter?.id
     },
-    currentChapterStart() {
-      return (this.currentChapter?.start || 0) / this._playbackRate
+    currentChapterTitle() {
+      return this.currentChapter?.title || null
     }
   },
   methods: {
-    clickChapter(chap) {
-      this.$emit('select', chap)
+    clickedOption(chapter) {
+      this.$emit('select', chapter)
     },
     scrollToChapter() {
       if (!this.currentChapterId) return
 
-      if (this.$refs.container) {
+      const container = this.$refs.container
+      if (container) {
         const currChapterEl = document.getElementById(`chapter-row-${this.currentChapterId}`)
         if (currChapterEl) {
-          const containerHeight = this.$refs.container.clientHeight
-          this.$refs.container.scrollTo({ top: currChapterEl.offsetTop - containerHeight / 2 })
+          const offsetTop = currChapterEl.offsetTop
+          const containerHeight = container.clientHeight
+          container.scrollTo({ top: offsetTop - containerHeight / 2 })
         }
       }
     }
   },
-  updated() {
-    if (this.value) {
-      this.$nextTick(this.scrollToChapter)
-    }
-  }
+  mounted() {}
 }
 </script>
-
-<style>
-#chapter-modal-wrapper .chapter-title {
-  max-width: calc(100% - 120px);
-}
-@media (min-width: 640px) {
-  #chapter-modal-wrapper .chapter-title {
-    max-width: calc(100% - 150px);
-  }
-}
-</style>

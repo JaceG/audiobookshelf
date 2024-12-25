@@ -1,146 +1,200 @@
 export const state = () => ({
-  isMobile: false,
-  isMobileLandscape: false,
-  isMobilePortrait: false,
-  showBatchCollectionModal: false,
-  showCollectionsModal: false,
-  showEditCollectionModal: false,
-  showPlaylistsModal: false,
-  showEditPlaylistModal: false,
-  showEditPodcastEpisode: false,
-  showViewPodcastEpisodeModal: false,
+  isModalOpen: false,
+  itemDownloads: [],
+  bookshelfListView: false,
+  series: null,
+  localMediaProgress: [],
+  lastSearch: null,
+  jumpForwardItems: [
+    {
+      icon: 'forward_5',
+      value: 5
+    },
+    {
+      icon: 'forward_10',
+      value: 10
+    },
+    {
+      icon: 'forward_30',
+      value: 30
+    }
+  ],
+  jumpBackwardsItems: [
+    {
+      icon: 'replay_5',
+      value: 5
+    },
+    {
+      icon: 'replay_10',
+      value: 10
+    },
+    {
+      icon: 'replay_30',
+      value: 30
+    }
+  ],
+  libraryIcons: ['database', 'audiobookshelf', 'books-1', 'books-2', 'book-1', 'microphone-1', 'microphone-3', 'radio', 'podcast', 'rss', 'headphones', 'music', 'file-picture', 'rocket', 'power', 'star', 'heart'],
+  selectedPlaylistItems: [],
+  showPlaylistsAddCreateModal: false,
+  showSelectLocalFolderModal: false,
+  localFolderSelectData: null,
+  hapticFeedback: 'LIGHT',
   showRSSFeedOpenCloseModal: false,
-  showShareModal: false,
-  showConfirmPrompt: false,
-  showRawCoverPreviewModal: false,
-  confirmPromptOptions: null,
-  showEditAuthorModal: false,
-  rssFeedEntity: null,
-  selectedEpisode: null,
-  selectedPlaylistItems: null,
-  selectedPlaylist: null,
-  selectedCollection: null,
-  selectedAuthor: null,
-  selectedMediaItems: [],
-  selectedRawCoverUrl: null,
-  selectedMediaItemShare: null,
-  isCasting: false, // Actively casting
-  isChromecastInitialized: false, // Script loadeds
-  showBatchQuickMatchModal: false,
-  dateFormats: [
-    {
-      text: 'MM/DD/YYYY',
-      value: 'MM/dd/yyyy'
-    },
-    {
-      text: 'DD/MM/YYYY',
-      value: 'dd/MM/yyyy'
-    },
-    {
-      text: 'DD.MM.YYYY',
-      value: 'dd.MM.yyyy'
-    },
-    {
-      text: 'YYYY-MM-DD',
-      value: 'yyyy-MM-dd'
-    },
-    {
-      text: 'MMM do, yyyy',
-      value: 'MMM do, yyyy'
-    },
-    {
-      text: 'MMMM do, yyyy',
-      value: 'MMMM do, yyyy'
-    },
-    {
-      text: 'dd MMM yyyy',
-      value: 'dd MMM yyyy'
-    },
-    {
-      text: 'dd MMMM yyyy',
-      value: 'dd MMMM yyyy'
-    }
-  ],
-  timeFormats: [
-    {
-      text: 'h:mma (am/pm)',
-      value: 'h:mma'
-    },
-    {
-      text: 'HH:mm (24-hour)',
-      value: 'HH:mm'
-    }
-  ],
-  podcastTypes: [
-    { text: 'Episodic', value: 'episodic', descriptionKey: 'LabelEpisodic' },
-    { text: 'Serial', value: 'serial', descriptionKey: 'LabelSerial' }
-  ],
-  episodeTypes: [
-    { text: 'Full', value: 'full', descriptionKey: 'LabelFull' },
-    { text: 'Trailer', value: 'trailer', descriptionKey: 'LabelTrailer' },
-    { text: 'Bonus', value: 'bonus', descriptionKey: 'LabelBonus' }
-  ],
-  libraryIcons: ['database', 'audiobookshelf', 'books-1', 'books-2', 'book-1', 'microphone-1', 'microphone-3', 'radio', 'podcast', 'rss', 'headphones', 'music', 'file-picture', 'rocket', 'power', 'star', 'heart']
+  rssFeedEntity: null
 })
 
 export const getters = {
-  getLibraryItemCoverSrc:
-    (state, getters, rootState, rootGetters) =>
-    (libraryItem, placeholder = null, raw = false) => {
-      if (!placeholder) placeholder = `${rootState.routerBasePath}/book_placeholder.jpg`
-      if (!libraryItem) return placeholder
-      const media = libraryItem.media
-      if (!media?.coverPath || media.coverPath === placeholder) return placeholder
+  getDownloadItem: state => (libraryItemId, episodeId = null) => {
+    return state.itemDownloads.find(i => {
+      // if (episodeId && !i.episodes.some(e => e.id == episodeId)) return false
+      if (episodeId && i.episodeId !== episodeId) return false
+      return i.libraryItemId == libraryItemId
+    })
+  },
+  getLibraryItemCoverSrc: (state, getters, rootState, rootGetters) => (libraryItem, placeholder, raw = false) => {
+    if (!libraryItem) return placeholder
+    const media = libraryItem.media
+    if (!media || !media.coverPath || media.coverPath === placeholder) return placeholder
 
-      // Absolute URL covers (should no longer be used)
-      if (media.coverPath.startsWith('http:') || media.coverPath.startsWith('https:')) return media.coverPath
+    // Absolute URL covers (should no longer be used)
+    if (media.coverPath.startsWith('http:') || media.coverPath.startsWith('https:')) return media.coverPath
 
-      const userToken = rootGetters['user/getToken']
-      const lastUpdate = libraryItem.updatedAt || Date.now()
-      const libraryItemId = libraryItem.libraryItemId || libraryItem.id // Workaround for /users/:id page showing media progress covers
-      return `${rootState.routerBasePath}/api/items/${libraryItemId}/cover?ts=${lastUpdate}${raw ? '&raw=1' : ''}`
-    },
-  getLibraryItemCoverSrcById:
-    (state, getters, rootState, rootGetters) =>
-    (libraryItemId, timestamp = null, raw = false) => {
-      const placeholder = `${rootState.routerBasePath}/book_placeholder.jpg`
-      if (!libraryItemId) return placeholder
-      const userToken = rootGetters['user/getToken']
-      return `${rootState.routerBasePath}/api/items/${libraryItemId}/cover?${raw ? '&raw=1' : ''}${timestamp ? `&ts=${timestamp}` : ''}`
-    },
-  getIsBatchSelectingMediaItems: (state) => {
-    return state.selectedMediaItems.length
+    const userToken = rootGetters['user/getToken']
+    const serverAddress = rootGetters['user/getServerAddress']
+    if (!userToken || !serverAddress) return placeholder
+
+    const lastUpdate = libraryItem.updatedAt || Date.now()
+
+    if (process.env.NODE_ENV !== 'production') { // Testing
+      // return `http://localhost:3333/api/items/${libraryItem.id}/cover?token=${userToken}&ts=${lastUpdate}`
+    }
+
+    const url = new URL(`/api/items/${libraryItem.id}/cover`, serverAddress)
+    return `${url}?token=${userToken}&ts=${lastUpdate}${raw ? '&raw=1' : ''}`
+  },
+  getLibraryItemCoverSrcById: (state, getters, rootState, rootGetters) => (libraryItemId, placeholder = null) => {
+    if (!placeholder) placeholder = `${rootState.routerBasePath}/book_placeholder.jpg`
+    if (!libraryItemId) return placeholder
+    const userToken = rootGetters['user/getToken']
+    const serverAddress = rootGetters['user/getServerAddress']
+    if (!userToken || !serverAddress) return placeholder
+
+    const url = new URL(`/api/items/${libraryItemId}/cover`, serverAddress)
+    return `${url}?token=${userToken}`
+  },
+  getLocalMediaProgressById: (state) => (localLibraryItemId, episodeId = null) => {
+    return state.localMediaProgress.find(lmp => {
+      if (episodeId != null && lmp.localEpisodeId != episodeId) return false
+      return lmp.localLibraryItemId == localLibraryItemId
+    })
+  },
+  getLocalMediaProgressByServerItemId: (state) => (libraryItemId, episodeId = null) => {
+    return state.localMediaProgress.find(lmp => {
+      if (episodeId != null && lmp.episodeId != episodeId) return false
+      return lmp.libraryItemId == libraryItemId
+    })
+  },
+  getJumpForwardIcon: state => (jumpForwardTime) => {
+    const item = state.jumpForwardItems.find(i => i.value == jumpForwardTime)
+    return item ? item.icon : 'forward_10'
+  },
+  getJumpBackwardsIcon: state => (jumpBackwardsTime) => {
+    const item = state.jumpBackwardsItems.find(i => i.value == jumpBackwardsTime)
+    return item ? item.icon : 'replay_10'
+  }
+}
+
+export const actions = {
+  async loadLocalMediaProgress({ state, commit }) {
+    const mediaProgress = await this.$db.getAllLocalMediaProgress()
+    commit('setLocalMediaProgress', mediaProgress)
   }
 }
 
 export const mutations = {
-  updateWindowSize(state, { width, height }) {
-    state.isMobile = width < 640 || height < 640
-    state.isMobileLandscape = state.isMobile && height < width
-    state.isMobilePortrait = state.isMobile && height >= width
+  setIsModalOpen(state, val) {
+    state.isModalOpen = val
   },
-  setShowCollectionsModal(state, val) {
-    state.showBatchCollectionModal = false
-    state.showCollectionsModal = val
+  addUpdateItemDownload(state, downloadItem) {
+    var index = state.itemDownloads.findIndex(i => i.id == downloadItem.id)
+    if (index >= 0) {
+      state.itemDownloads.splice(index, 1, downloadItem)
+    } else {
+      state.itemDownloads.push(downloadItem)
+    }
   },
-  setShowBatchCollectionsModal(state, val) {
-    state.showBatchCollectionModal = true
-    state.showCollectionsModal = val
+  updateDownloadItemPart(state, downloadItemPart) {
+    const downloadItem = state.itemDownloads.find(i => i.id == downloadItemPart.downloadItemId)
+    if (!downloadItem) {
+      console.error('updateDownloadItemPart: Download item not found for itemPart', JSON.stringify(downloadItemPart))
+      return
+    }
+
+    let totalBytes = 0
+    let totalBytesDownloaded = 0
+    downloadItem.downloadItemParts = downloadItem.downloadItemParts.map(dip => {
+      let newDip = dip.id == downloadItemPart.id ? downloadItemPart : dip
+
+      totalBytes += newDip.completed ? Number(newDip.bytesDownloaded) : Number(newDip.fileSize)
+      totalBytesDownloaded += Number(newDip.bytesDownloaded)
+
+      return newDip
+    })
+
+    if (totalBytes > 0) {
+      downloadItem.itemProgress = Math.min(1, totalBytesDownloaded / totalBytes)
+      console.log(`updateDownloadItemPart: filename=${downloadItemPart.filename}, totalBytes=${totalBytes}, downloaded=${totalBytesDownloaded}, itemProgress=${downloadItem.itemProgress}`)
+    } else {
+      downloadItem.itemProgress = 0
+    }
   },
-  setShowEditCollectionModal(state, val) {
-    state.showEditCollectionModal = val
+  removeItemDownload(state, id) {
+    state.itemDownloads = state.itemDownloads.filter(i => i.id != id)
   },
-  setShowPlaylistsModal(state, val) {
-    state.showPlaylistsModal = val
+  setBookshelfListView(state, val) {
+    state.bookshelfListView = val
   },
-  setShowEditPlaylistModal(state, val) {
-    state.showEditPlaylistModal = val
+  setSeries(state, val) {
+    state.series = val
   },
-  setShowEditPodcastEpisodeModal(state, val) {
-    state.showEditPodcastEpisode = val
+  setLocalMediaProgress(state, val) {
+    state.localMediaProgress = val
   },
-  setShowViewPodcastEpisodeModal(state, val) {
-    state.showViewPodcastEpisodeModal = val
+  updateLocalMediaProgress(state, prog) {
+    if (!prog || !prog.id) {
+      return
+    }
+    var index = state.localMediaProgress.findIndex(lmp => lmp.id == prog.id)
+    if (index >= 0) {
+      state.localMediaProgress.splice(index, 1, prog)
+    } else {
+      state.localMediaProgress.push(prog)
+    }
+  },
+  removeLocalMediaProgress(state, id) {
+    state.localMediaProgress = state.localMediaProgress.filter(lmp => lmp.id != id)
+  },
+  removeLocalMediaProgressForItem(state, llid) {
+    state.localMediaProgress = state.localMediaProgress.filter(lmp => lmp.localLibraryItemId !== llid)
+  },
+  setLastSearch(state, val) {
+    state.lastSearch = val
+  },
+  setSelectedPlaylistItems(state, items) {
+    state.selectedPlaylistItems = items
+  },
+  setShowPlaylistsAddCreateModal(state, val) {
+    state.showPlaylistsAddCreateModal = val
+  },
+  showSelectLocalFolderModal(state, data) {
+    state.localFolderSelectData = data
+    state.showSelectLocalFolderModal = true
+  },
+  setShowSelectLocalFolderModal(state, val) {
+    state.showSelectLocalFolderModal = val
+  },
+  setHapticFeedback(state, val) {
+    state.hapticFeedback = val || 'LIGHT'
   },
   setShowRSSFeedOpenCloseModal(state, val) {
     state.showRSSFeedOpenCloseModal = val
@@ -148,77 +202,5 @@ export const mutations = {
   setRSSFeedOpenCloseModal(state, entity) {
     state.rssFeedEntity = entity
     state.showRSSFeedOpenCloseModal = true
-  },
-  setShowShareModal(state, val) {
-    state.showShareModal = val
-  },
-  setShareModal(state, mediaItemShare) {
-    state.selectedMediaItemShare = mediaItemShare
-    state.showShareModal = true
-  },
-  setShowConfirmPrompt(state, val) {
-    state.showConfirmPrompt = val
-  },
-  setConfirmPrompt(state, options) {
-    state.confirmPromptOptions = options
-    state.showConfirmPrompt = true
-  },
-  setShowRawCoverPreviewModal(state, val) {
-    state.showRawCoverPreviewModal = val
-  },
-  setRawCoverPreviewModal(state, rawCoverUrl) {
-    state.selectedRawCoverUrl = rawCoverUrl
-    state.showRawCoverPreviewModal = true
-  },
-  setEditCollection(state, collection) {
-    state.selectedCollection = collection
-    state.showEditCollectionModal = true
-  },
-  setEditPlaylist(state, playlist) {
-    state.selectedPlaylist = playlist
-    state.showEditPlaylistModal = true
-  },
-  setSelectedEpisode(state, episode) {
-    state.selectedEpisode = episode
-  },
-  setSelectedPlaylistItems(state, items) {
-    state.selectedPlaylistItems = items
-  },
-  showEditAuthorModal(state, author) {
-    state.selectedAuthor = author
-    state.showEditAuthorModal = true
-  },
-  setShowEditAuthorModal(state, val) {
-    state.showEditAuthorModal = val
-  },
-  setSelectedAuthor(state, author) {
-    state.selectedAuthor = author
-  },
-  setChromecastInitialized(state, val) {
-    state.isChromecastInitialized = val
-  },
-  setCasting(state, val) {
-    state.isCasting = val
-  },
-  setShowBatchQuickMatchModal(state, val) {
-    state.showBatchQuickMatchModal = val
-  },
-  resetSelectedMediaItems(state) {
-    state.selectedMediaItems = []
-  },
-  toggleMediaItemSelected(state, item) {
-    if (state.selectedMediaItems.some((i) => i.id === item.id)) {
-      state.selectedMediaItems = state.selectedMediaItems.filter((i) => i.id !== item.id)
-    } else {
-      state.selectedMediaItems.push(item)
-    }
-  },
-  setMediaItemSelected(state, { item, selected }) {
-    const isAlreadySelected = state.selectedMediaItems.some((i) => i.id === item.id)
-    if (isAlreadySelected && !selected) {
-      state.selectedMediaItems = state.selectedMediaItems.filter((i) => i.id !== item.id)
-    } else if (selected && !isAlreadySelected) {
-      state.selectedMediaItems.push(item)
-    }
   }
 }

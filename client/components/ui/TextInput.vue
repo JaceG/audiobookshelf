@@ -1,32 +1,14 @@
 <template>
-  <div ref="wrapper" class="relative">
-    <input
-      :id="inputId"
-      :name="inputName"
-      ref="input"
-      v-model="inputValue"
-      :type="actualType"
-      :step="step"
-      :min="min"
-      :readonly="readonly"
-      :disabled="disabled"
-      :placeholder="placeholder"
-      dir="auto"
-      class="rounded bg-primary text-gray-200 focus:border-gray-300 focus:bg-bg focus:outline-none border border-gray-600 h-full w-full"
-      :class="classList"
-      @keyup="keyup"
-      @change="change"
-      @focus="focused"
-      @blur="blurred"
-    />
-    <div v-if="clearable && inputValue" class="absolute top-0 right-0 h-full px-2 flex items-center justify-center">
-      <span class="material-symbols text-gray-300 cursor-pointer" style="font-size: 1.1rem" @click.stop.prevent="clear">close</span>
+  <div class="relative">
+    <input v-model="input" ref="input" autofocus :type="type" :disabled="disabled" :readonly="readonly" autocorrect="off" autocapitalize="none" autocomplete="off" :placeholder="placeholder" class="py-2 w-full outline-none bg-primary disabled:text-fg-muted" :class="inputClass" @keyup="keyup" />
+    <div v-if="prependIcon" class="absolute top-0 left-0 h-full px-2 flex items-center justify-center">
+      <span class="material-icons text-lg">{{ prependIcon }}</span>
     </div>
-    <div v-if="type === 'password' && isHovering" class="absolute top-0 right-0 h-full px-4 flex items-center justify-center">
-      <span class="material-symbols text-gray-400 cursor-pointer text-lg" @click.stop.prevent="showPassword = !showPassword">{{ !showPassword ? 'visibility' : 'visibility_off' }}</span>
+    <div v-if="clearable && input" class="absolute top-0 right-0 h-full px-2 flex items-center justify-center" @click.stop="clear">
+      <span class="material-icons text-lg">close</span>
     </div>
-    <div v-else-if="showCopy" class="absolute top-0 right-0 h-full px-4 flex items-center justify-center">
-      <span class="material-symbols text-gray-400 cursor-pointer text-lg" @click.stop.prevent="copyToClipboard">{{ !hasCopied ? 'content_copy' : 'done' }}</span>
+    <div v-else-if="!clearable && appendIcon" class="absolute top-0 right-0 h-full px-2 flex items-center justify-center">
+      <span class="material-icons text-lg">{{ appendIcon }}</span>
     </div>
   </div>
 </template>
@@ -36,40 +18,33 @@ export default {
   props: {
     value: [String, Number],
     placeholder: String,
-    readonly: Boolean,
-    type: {
-      type: String,
-      default: 'text'
-    },
+    type: String,
     disabled: Boolean,
-    paddingY: {
-      type: Number,
-      default: 2
+    readonly: Boolean,
+    borderless: Boolean,
+    bg: {
+      type: String,
+      default: 'bg'
     },
-    paddingX: {
-      type: Number,
-      default: 3
+    rounded: {
+      type: String,
+      default: 'sm'
     },
-    noSpinner: Boolean,
-    textCenter: Boolean,
-    clearable: Boolean,
-    inputId: String,
-    inputName: String,
-    showCopy: Boolean,
-    step: [String, Number],
-    min: [String, Number],
-    customInputClass: String
+    prependIcon: {
+      type: String,
+      default: null
+    },
+    appendIcon: {
+      type: String,
+      default: null
+    },
+    clearable: Boolean
   },
   data() {
-    return {
-      showPassword: false,
-      isHovering: false,
-      isFocused: false,
-      hasCopied: false
-    }
+    return {}
   },
   computed: {
-    inputValue: {
+    input: {
       get() {
         return this.value
       },
@@ -77,79 +52,43 @@ export default {
         this.$emit('input', val)
       }
     },
-    classList() {
-      var _list = []
-      _list.push(`px-${this.paddingX}`)
-      _list.push(`py-${this.paddingY}`)
-      if (this.noSpinner) _list.push('no-spinner')
-      if (this.textCenter) _list.push('text-center')
-      if (this.customInputClass) _list.push(this.customInputClass)
-      return _list.join(' ')
-    },
-    actualType() {
-      if (this.type === 'password' && this.showPassword) return 'text'
-      return this.type
+    inputClass() {
+      var classes = [`bg-${this.bg}`, `rounded-${this.rounded}`]
+      if (this.disabled) classes.push('text-fg-muted')
+      else classes.push('text-fg')
+
+      if (this.prependIcon) classes.push('pl-10 pr-2')
+      else classes.push('px-2')
+
+      if (!this.borderless) classes.push('border border-border')
+      return classes.join(' ')
     }
   },
   methods: {
-    copyToClipboard() {
-      if (this.hasCopied) return
-      this.$copyToClipboard(this.inputValue).then((success) => {
-        this.hasCopied = success
-        setTimeout(() => {
-          this.hasCopied = false
-        }, 2000)
-      })
-    },
     clear() {
-      this.inputValue = ''
-      this.$emit('clear')
+      this.input = ''
     },
-    focused() {
-      this.isFocused = true
-      this.$emit('focus')
+    focus() {
+      if (this.$refs.input) {
+        this.$refs.input.focus()
+        this.$refs.input.click()
+      }
     },
-    blurred() {
-      this.isFocused = false
-      this.$emit('blur')
-    },
-    change(e) {
-      this.$emit('change', e.target.value)
-    },
-    keyup(e) {
-      this.$emit('keyup', e)
-    },
-    blur() {
-      if (this.$refs.input) this.$refs.input.blur()
-    },
-    setFocus() {
-      if (this.$refs.input) this.$refs.input.focus()
-    },
-    mouseover() {
-      this.isHovering = true
-    },
-    mouseleave() {
-      this.isHovering = false
+    keyup() {
+      if (this.$refs.input) {
+        this.input = this.$refs.input.value
+      }
     }
   },
-  mounted() {
-    if (this.type === 'password' && this.$refs.wrapper) {
-      this.$refs.wrapper.addEventListener('mouseover', this.mouseover)
-      this.$refs.wrapper.addEventListener('mouseleave', this.mouseleave)
-    }
-  }
+  mounted() {}
 }
 </script>
 
 <style scoped>
-input {
-  border-style: inherit !important;
+input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(100%);
 }
-input:read-only {
-  color: #bbb;
-  background-color: #444;
-}
-input::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+html[data-theme='light'] input[type='time']::-webkit-calendar-picker-indicator {
+  filter: unset;
 }
 </style>

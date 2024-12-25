@@ -1,219 +1,439 @@
 <template>
-  <div id="page-wrapper" class="bg-bg page overflow-hidden" :class="streamLibraryItem ? 'streaming' : ''">
-    <div id="item-page-wrapper" class="w-full h-full overflow-y-auto px-2 py-6 lg:p-8">
-      <div class="flex flex-col lg:flex-row max-w-6xl mx-auto">
-        <div class="w-full flex justify-center lg:block lg:w-52" style="min-width: 208px">
-          <div class="relative group" style="height: fit-content">
-            <covers-book-cover class="relative group-hover:brightness-75 transition cursor-pointer" expand-on-click :library-item="libraryItem" :width="bookCoverWidth" :book-cover-aspect-ratio="bookCoverAspectRatio" />
-
-            <!-- Item Progress Bar -->
-            <div v-if="!isPodcast" class="absolute bottom-0 left-0 h-1.5 shadow-sm z-10" :class="userIsFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: 208 * progressPercent + 'px' }"></div>
-
-            <!-- Item Cover Overlay -->
-            <div class="absolute top-0 left-0 w-full h-full z-10 opacity-0 group-hover:opacity-100 pointer-events-none">
-              <div v-show="showPlayButton && !isStreaming" class="h-full flex items-center justify-center pointer-events-none">
-                <button class="hover:text-white text-gray-200 hover:scale-110 transform duration-200 pointer-events-auto cursor-pointer" :aria-label="$strings.ButtonPlay" @click.stop.prevent="playItem">
-                  <span class="material-symbols fill text-4xl">play_arrow</span>
-                </button>
-              </div>
-
-              <button class="absolute bottom-2.5 right-2.5 z-10 material-symbols text-lg cursor-pointer text-white text-opacity-75 hover:text-opacity-100 hover:scale-110 transform duration-200 pointer-events-auto" :aria-label="$strings.ButtonEdit" @click="showEditCover">edit</button>
-            </div>
+  <div v-if="!libraryItem" class="w-full h-full relative flex items-center justify-center bg-bg">
+    <ui-loading-indicator />
+  </div>
+  <div v-else id="item-page" class="w-full h-full overflow-y-auto overflow-x-hidden relative bg-bg">
+    <!-- cover -->
+    <div class="w-full flex justify-center relative">
+      <div style="width: 0; transform: translateX(-50vw); overflow: visible">
+        <div style="width: 150vw; overflow: hidden">
+          <div id="coverBg" style="filter: blur(5vw)">
+            <covers-book-cover :library-item="libraryItem" :width="coverWidth" :book-cover-aspect-ratio="bookCoverAspectRatio" @imageLoaded="coverImageLoaded" />
           </div>
         </div>
-        <div class="flex-grow px-2 py-6 lg:py-0 md:px-10">
-          <div class="flex justify-center">
-            <div class="mb-4">
-              <h1 class="text-2xl md:text-3xl font-semibold">
-                <div class="flex items-center">
-                  {{ title }}
-                  <widgets-explicit-indicator v-if="isExplicit" />
-                  <widgets-abridged-indicator v-if="isAbridged" />
-                </div>
-              </h1>
-
-              <p v-if="bookSubtitle" class="text-gray-200 text-xl md:text-2xl">{{ bookSubtitle }}</p>
-
-              <template v-for="(_series, index) in seriesList">
-                <nuxt-link :key="_series.id" :to="`/library/${libraryId}/series/${_series.id}`" class="hover:underline font-sans text-gray-300 text-lg leading-7">{{ _series.text }}</nuxt-link
-                ><span :key="index" v-if="index < seriesList.length - 1">, </span>
-              </template>
-
-              <p v-if="isPodcast" class="mb-2 mt-0.5 text-gray-200 text-lg md:text-xl">{{ $getString('LabelByAuthor', [podcastAuthor]) }}</p>
-              <p v-else-if="authors.length" class="mb-2 mt-0.5 text-gray-200 text-lg md:text-xl max-w-[calc(100vw-2rem)] overflow-hidden overflow-ellipsis">
-                by <nuxt-link v-for="(author, index) in authors" :key="index" :to="`/author/${author.id}`" class="hover:underline">{{ author.name }}<span v-if="index < authors.length - 1">,&nbsp;</span></nuxt-link>
-              </p>
-              <p v-else class="mb-2 mt-0.5 text-gray-200 text-xl">by Unknown</p>
-
-              <content-library-item-details :library-item="libraryItem" />
-            </div>
-            <div class="hidden md:block flex-grow" />
-          </div>
-
-          <!-- Podcast episode downloads queue -->
-          <div v-if="episodeDownloadsQueued.length" class="px-4 py-2 mt-4 bg-info bg-opacity-40 text-sm font-semibold rounded-md text-gray-100 relative max-w-max mx-auto md:mx-0">
-            <div class="flex items-center">
-              <p class="text-sm py-1">{{ $getString('MessageEpisodesQueuedForDownload', [episodeDownloadsQueued.length]) }}</p>
-
-              <span v-if="userIsAdminOrUp" class="material-symbols hover:text-error text-xl ml-3 cursor-pointer" @click="clearDownloadQueue">close</span>
-            </div>
-          </div>
-
-          <!-- Podcast episodes currently downloading -->
-          <div v-if="episodesDownloading.length" class="px-4 py-2 mt-4 bg-success bg-opacity-20 text-sm font-semibold rounded-md text-gray-100 relative max-w-max mx-auto md:mx-0">
-            <div v-for="episode in episodesDownloading" :key="episode.id" class="flex items-center">
-              <widgets-loading-spinner />
-              <p class="text-sm py-1 pl-4">{{ $strings.MessageDownloadingEpisode }} "{{ episode.episodeDisplayTitle }}"</p>
-            </div>
-          </div>
-
-          <!-- Progress -->
-          <div v-if="!isPodcast && progressPercent > 0" class="px-4 py-2 mt-4 bg-primary text-sm font-semibold rounded-md text-gray-100 relative max-w-max mx-auto md:mx-0" :class="resettingProgress ? 'opacity-25' : ''">
-            <p v-if="progressPercent < 1" class="leading-6">{{ $strings.LabelYourProgress }}: {{ Math.round(progressPercent * 100) }}%</p>
-            <p v-else class="text-xs">{{ $strings.LabelFinished }} {{ $formatDate(userProgressFinishedAt, dateFormat) }}</p>
-            <p v-if="progressPercent < 1 && !useEBookProgress" class="text-gray-200 text-xs">{{ $getString('LabelTimeRemaining', [$elapsedPretty(userTimeRemaining)]) }}</p>
-            <p class="text-gray-400 text-xs pt-1">{{ $strings.LabelStarted }} {{ $formatDate(userProgressStartedAt, dateFormat) }}</p>
-
-            <div v-if="!resettingProgress" class="absolute -top-1.5 -right-1.5 p-1 w-5 h-5 rounded-full bg-bg hover:bg-error border border-primary flex items-center justify-center cursor-pointer" @click.stop="clearProgressClick">
-              <span class="material-symbols text-sm">&#xe5cd;</span>
-            </div>
-          </div>
-
-          <!-- Icon buttons -->
-          <div class="flex items-center justify-center md:justify-start pt-4">
-            <ui-btn v-if="showPlayButton" :disabled="isStreaming" color="success" :padding-x="4" small class="flex items-center h-9 mr-2" @click="playItem">
-              <span v-show="!isStreaming" class="material-symbols fill text-2xl -ml-2 pr-1 text-white">&#xe037;</span>
-              {{ isStreaming ? $strings.ButtonPlaying : $strings.ButtonPlay }}
-            </ui-btn>
-
-            <ui-btn v-else-if="isMissing || isInvalid" color="error" :padding-x="4" small class="flex items-center h-9 mr-2">
-              <span class="material-symbols text-2xl -ml-2 pr-1 text-white">error</span>
-              {{ isMissing ? $strings.LabelMissing : $strings.LabelIncomplete }}
-            </ui-btn>
-
-            <ui-tooltip v-if="showQueueBtn" :text="isQueued ? $strings.ButtonQueueRemoveItem : $strings.ButtonQueueAddItem" direction="top">
-              <ui-icon-btn :icon="isQueued ? 'playlist_add_check' : 'playlist_play'" :bg-color="isQueued ? 'primary' : 'success bg-opacity-60'" class="mx-0.5" :class="isQueued ? 'text-success' : ''" @click="queueBtnClick" />
-            </ui-tooltip>
-
-            <ui-btn v-if="showReadButton" color="info" :padding-x="4" small class="flex items-center h-9 mr-2" @click="openEbook">
-              <span class="material-symbols text-2xl -ml-2 pr-2 text-white" aria-hidden="true">auto_stories</span>
-              {{ $strings.ButtonRead }}
-            </ui-btn>
-
-            <ui-tooltip v-if="userCanUpdate" :text="$strings.LabelEdit" direction="top">
-              <ui-icon-btn icon="&#xe3c9;" outlined class="mx-0.5" :aria-label="$strings.LabelEdit" @click="editClick" />
-            </ui-tooltip>
-
-            <ui-tooltip v-if="!isPodcast" :text="userIsFinished ? $strings.MessageMarkAsNotFinished : $strings.MessageMarkAsFinished" direction="top">
-              <ui-read-icon-btn :disabled="isProcessingReadUpdate" :is-read="userIsFinished" class="mx-0.5" @click="toggleFinished" />
-            </ui-tooltip>
-
-            <!-- Only admin or root user can download new episodes -->
-            <ui-tooltip v-if="isPodcast && userIsAdminOrUp" :text="$strings.LabelFindEpisodes" direction="top">
-              <ui-icon-btn icon="search" class="mx-0.5" :aria-label="$strings.LabelFindEpisodes" :loading="fetchingRSSFeed" outlined @click="findEpisodesClick" />
-            </ui-tooltip>
-
-            <ui-context-menu-dropdown v-if="contextMenuItems.length" :items="contextMenuItems" :menu-width="148" @action="contextMenuAction">
-              <template #default="{ showMenu, clickShowMenu, disabled }">
-                <button type="button" :disabled="disabled" class="mx-0.5 icon-btn bg-primary border border-gray-600 w-9 h-9 rounded-md flex items-center justify-center relative" aria-haspopup="listbox" :aria-expanded="showMenu" :aria-label="$strings.LabelMore" @click.stop.prevent="clickShowMenu">
-                  <span class="material-symbols text-2xl">&#xe5d3;</span>
-                </button>
-              </template>
-            </ui-context-menu-dropdown>
-          </div>
-
-          <div class="my-4 w-full">
-            <p ref="description" id="item-description" dir="auto" class="text-base text-gray-100 whitespace-pre-line mb-1" :class="{ 'show-full': showFullDescription }">{{ description }}</p>
-            <button v-if="isDescriptionClamped" class="py-0.5 flex items-center text-slate-300 hover:text-white" @click="showFullDescription = !showFullDescription">{{ showFullDescription ? $strings.ButtonReadLess : $strings.ButtonReadMore }} <span class="material-symbols text-xl pl-1" v-html="showFullDescription ? 'expand_less' : '&#xe313;'" /></button>
-          </div>
-
-          <tables-chapters-table v-if="chapters.length" :library-item="libraryItem" class="mt-6" />
-
-          <tables-tracks-table v-if="tracks.length" :title="$strings.LabelStatsAudioTracks" :tracks="tracksWithAudioFile" :is-file="isFile" :library-item-id="libraryItemId" class="mt-6" />
-
-          <tables-podcast-lazy-episodes-table v-if="isPodcast" :library-item="libraryItem" />
-
-          <tables-ebook-files-table v-if="ebookFiles.length" :library-item="libraryItem" class="mt-6" />
-
-          <tables-library-files-table v-if="libraryFiles.length" :library-item="libraryItem" class="mt-6" />
-        </div>
+      </div>
+      <div class="relative" @click="showFullscreenCover = true">
+        <covers-book-cover :library-item="libraryItem" :width="coverWidth" :book-cover-aspect-ratio="bookCoverAspectRatio" no-bg raw @imageLoaded="coverImageLoaded" />
+        <div v-if="!isPodcast" class="absolute bottom-0 left-0 h-1 shadow-sm z-10" :class="userIsFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: coverWidth * progressPercent + 'px' }"></div>
       </div>
     </div>
 
-    <modals-podcast-episode-feed v-model="showPodcastEpisodeFeed" :library-item="libraryItem" :episodes="podcastFeedEpisodes" />
-    <modals-bookmarks-modal v-model="showBookmarksModal" :bookmarks="bookmarks" :library-item-id="libraryItemId" hide-create @select="selectBookmark" />
+    <div class="relative">
+      <!-- background gradient -->
+      <div id="item-page-bg-gradient" class="absolute top-0 left-0 w-full pointer-events-none z-0" :style="{ opacity: coverRgb ? 1 : 0 }">
+        <div class="w-full h-full" :style="{ backgroundColor: coverRgb }" />
+        <div class="w-full h-full absolute top-0 left-0" style="background: var(--gradient-item-page)" />
+      </div>
+
+      <div class="relative z-10 px-3 py-4">
+        <!-- title -->
+        <div class="text-center mb-2">
+          <div class="flex items-center justify-center">
+            <h1 class="text-xl font-semibold">{{ title }}</h1>
+            <widgets-explicit-indicator v-if="isExplicit" />
+          </div>
+          <p v-if="subtitle" class="text-fg text-base">{{ subtitle }}</p>
+        </div>
+
+        <div v-if="hasLocal" class="mx-1">
+          <div v-if="isLocalOnly" class="w-full rounded-md bg-warning/10 border border-warning p-4">
+            <p class="text-sm">{{ $strings.MessageMediaNotLinkedToServer }}</p>
+          </div>
+          <div v-else-if="currentServerConnectionConfigId && !isLocalMatchingServerAddress" class="w-full rounded-md bg-warning/10 border border-warning p-4">
+            <p class="text-sm">{{ $getString('MessageMediaLinkedToADifferentServer', [localLibraryItem.serverAddress]) }}</p>
+          </div>
+          <div v-else-if="currentServerConnectionConfigId && !isLocalMatchingUser" class="w-full rounded-md bg-warning/10 border border-warning p-4">
+            <p class="text-sm">{{ $strings.MessageMediaLinkedToADifferentUser }}</p>
+          </div>
+          <div v-else-if="currentServerConnectionConfigId && !isLocalMatchingConnectionConfig" class="w-full rounded-md bg-warning/10 border border-warning p-4">
+            <p class="text-sm">Media is linked to a different server connection config. Downloaded User Id: {{ localLibraryItem.serverUserId }}. Downloaded Server Address: {{ localLibraryItem.serverAddress }}. Currently connected User Id: {{ user.id }}. Currently connected server address: {{ currentServerAddress }}.</p>
+          </div>
+        </div>
+
+        <!-- action buttons -->
+        <div class="col-span-full">
+          <div v-if="showPlay || showRead" class="flex mt-4 -mx-1">
+            <ui-btn v-if="showPlay" color="success" class="flex items-center justify-center flex-grow mx-1" :loading="playerIsStartingForThisMedia" :padding-x="4" @click="playClick">
+              <span class="material-icons">{{ playerIsPlaying ? 'pause' : 'play_arrow' }}</span>
+              <span class="px-1 text-sm">{{ playerIsPlaying ? $strings.ButtonPause : isPodcast ? $strings.ButtonNextEpisode : hasLocal ? $strings.ButtonPlay : $strings.ButtonStream }}</span>
+            </ui-btn>
+            <ui-btn v-if="showRead" color="info" class="flex items-center justify-center mx-1" :class="showPlay ? '' : 'flex-grow'" :padding-x="2" @click="readBook">
+              <span class="material-icons">auto_stories</span>
+              <span v-if="!showPlay" class="px-2 text-base">{{ $strings.ButtonRead }} {{ ebookFormat }}</span>
+            </ui-btn>
+            <ui-btn v-if="showDownload" :color="downloadItem ? 'warning' : 'primary'" class="flex items-center justify-center mx-1" :padding-x="2" @click="downloadClick">
+              <span class="material-icons" :class="downloadItem || startingDownload ? 'animate-pulse' : ''">{{ downloadItem || startingDownload ? 'downloading' : 'download' }}</span>
+            </ui-btn>
+            <ui-btn color="primary" class="flex items-center justify-center mx-1" :padding-x="2" @click="moreButtonPress">
+              <span class="material-icons">more_vert</span>
+            </ui-btn>
+          </div>
+
+          <div v-if="!isPodcast && progressPercent > 0" class="px-4 py-2 bg-primary text-sm font-semibold rounded-md text-fg mt-4 text-center">
+            <p>{{ $strings.LabelYourProgress }}: {{ Math.round(progressPercent * 100) }}%</p>
+            <p v-if="!useEBookProgress && !userIsFinished" class="text-fg-muted text-xs">{{ $getString('LabelTimeRemaining', [$elapsedPretty(userTimeRemaining)]) }}</p>
+            <p v-else-if="userIsFinished" class="text-fg-muted text-xs">{{ $strings.LabelFinished }} {{ $formatDate(userProgressFinishedAt) }}</p>
+          </div>
+        </div>
+
+        <div v-if="downloadItem" class="py-3">
+          <p v-if="downloadItem.itemProgress == 1" class="text-center text-lg">{{ $strings.MessageDownloadCompleteProcessing }}</p>
+          <p v-else class="text-center text-lg">{{ $strings.MessageDownloading }} ({{ Math.round(downloadItem.itemProgress * 100) }}%)</p>
+        </div>
+
+        <!-- metadata -->
+        <div id="metadata" class="grid gap-2 my-2" style>
+          <div v-if="podcastAuthor || bookAuthors?.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelAuthor }}</div>
+          <div v-if="podcastAuthor" class="text-sm">{{ podcastAuthor }}</div>
+          <div v-else-if="bookAuthors?.length" class="text-sm">
+            <template v-for="(author, index) in bookAuthors">
+              <nuxt-link :key="author.id" :to="`/bookshelf/library?filter=authors.${$encode(author.id)}`" class="underline whitespace-nowrap">{{ author.name }}</nuxt-link
+              ><span :key="`${author.id}-comma`" v-if="index < bookAuthors.length - 1">, </span>
+            </template>
+          </div>
+
+          <div v-if="podcastType" class="text-fg-muted uppercase text-sm">{{ $strings.LabelType }}</div>
+          <div v-if="podcastType" class="text-sm capitalize">{{ podcastType }}</div>
+
+          <div v-if="series?.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelSeries }}</div>
+          <div v-if="series?.length" class="text-sm">
+            <template v-for="(series, index) in seriesList">
+              <nuxt-link :key="series.id" :to="`/bookshelf/series/${series.id}`" class="underline whitespace-nowrap">{{ series.text }}</nuxt-link
+              ><span :key="`${series.id}-comma`" v-if="index < seriesList.length - 1">, </span>
+            </template>
+          </div>
+
+          <div v-if="numTracks" class="text-fg-muted uppercase text-sm">{{ $strings.LabelDuration }}</div>
+          <div v-if="numTracks" class="text-sm">{{ $elapsedPretty(duration) }}</div>
+
+          <div v-if="narrators?.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelNarrators }}</div>
+          <div v-if="narrators?.length" class="text-sm">
+            <template v-for="(narrator, index) in narrators">
+              <nuxt-link :key="narrator" :to="`/bookshelf/library?filter=narrators.${$encode(narrator)}`" class="underline whitespace-nowrap">{{ narrator }}</nuxt-link
+              ><span :key="index" v-if="index < narrators.length - 1">, </span>
+            </template>
+          </div>
+
+          <div v-if="genres.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelGenres }}</div>
+          <div v-if="genres.length" class="text-sm">
+            <template v-for="(genre, index) in genres">
+              <nuxt-link :key="genre" :to="`/bookshelf/library?filter=genres.${$encode(genre)}`" class="underline whitespace-nowrap">{{ genre }}</nuxt-link
+              ><span :key="index" v-if="index < genres.length - 1">, </span>
+            </template>
+          </div>
+
+          <div v-if="tags.length" class="text-fg-muted uppercase text-sm">{{ $strings.LabelTags }}</div>
+          <div v-if="tags.length" class="text-sm">
+            <template v-for="(tag, index) in tags">
+              <nuxt-link :key="tag" :to="`/bookshelf/library?filter=tags.${$encode(tag)}`" class="underline whitespace-nowrap">{{ tag }}</nuxt-link
+              ><span :key="index" v-if="index < tags.length - 1">, </span>
+            </template>
+          </div>
+
+          <div v-if="publishedYear" class="text-fg-muted uppercase text-sm">{{ $strings.LabelPublishYear }}</div>
+          <div v-if="publishedYear" class="text-sm">{{ publishedYear }}</div>
+        </div>
+
+        <div v-if="description" class="w-full py-2">
+          <p ref="description" class="text-sm text-justify whitespace-pre-line font-light" :class="{ 'line-clamp-4': !showFullDescription }" style="hyphens: auto">{{ description }}</p>
+
+          <div v-if="descriptionClamped" class="text-fg text-sm py-2" @click="showFullDescription = !showFullDescription">
+            {{ showFullDescription ? $strings.ButtonReadLess : $strings.ButtonReadMore }}
+            <span class="material-icons align-middle text-base -mt-px">{{ showFullDescription ? 'expand_less' : 'expand_more' }}</span>
+          </div>
+        </div>
+
+        <!-- tables -->
+        <tables-podcast-episodes-table v-if="isPodcast" :library-item="libraryItem" :local-library-item-id="localLibraryItemId" :episodes="episodes" :local-episodes="localLibraryItemEpisodes" :is-local="isLocal" />
+
+        <tables-chapters-table v-if="numChapters" :library-item="libraryItem" @playAtTimestamp="playAtTimestamp" />
+
+        <tables-tracks-table v-if="numTracks" :tracks="tracks" :library-item-id="libraryItemId" />
+
+        <tables-ebook-files-table v-if="ebookFiles.length" :library-item="libraryItem" />
+      </div>
+    </div>
+
+    <!-- modals -->
+    <modals-item-more-menu-modal v-model="showMoreMenu" :library-item="libraryItem" :rss-feed="rssFeed" :processing.sync="processing" />
+
+    <modals-select-local-folder-modal v-model="showSelectLocalFolder" :media-type="mediaType" @select="selectedLocalFolder" />
+
+    <modals-fullscreen-cover v-model="showFullscreenCover" :library-item="libraryItem" />
+
+    <div v-show="processing" class="fixed top-0 left-0 w-screen h-screen flex items-center justify-center bg-black/50 z-50">
+      <ui-loading-indicator />
+    </div>
   </div>
 </template>
 
 <script>
+import { Dialog } from '@capacitor/dialog'
+import { AbsFileSystem, AbsDownloader } from '@/plugins/capacitor'
+import { FastAverageColor } from 'fast-average-color'
+import cellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
+
 export default {
-  async asyncData({ store, params, app, redirect, route }) {
-    if (!store.state.user.user) {
-      return redirect(`/login?redirect=${route.path}`)
+  async asyncData({ store, params, redirect, app, query }) {
+    const libraryItemId = params.id
+    let libraryItem = null
+
+    if (libraryItemId.startsWith('local')) {
+      libraryItem = await app.$db.getLocalLibraryItem(libraryItemId)
+      if (!libraryItem) {
+        return redirect('/?error=Failed to get downloaded library item')
+      }
+
+      // If library item is linked to the currently connected server then redirect to the page using the server library item id
+      if (libraryItem?.libraryItemId?.startsWith('li_')) {
+        // Detect old library item id
+        console.error('Local library item has old server library item id', libraryItem.libraryItemId)
+      } else if (query.noredirect !== '1' && libraryItem?.libraryItemId && libraryItem?.serverAddress === store.getters['user/getServerAddress'] && store.state.socketConnected) {
+        const queryParams = new URLSearchParams()
+        queryParams.set('localLibraryItemId', libraryItemId)
+        if (libraryItem.mediaType === 'podcast') {
+          // Filter by downloaded when redirecting from the local copy
+          queryParams.set('episodefilter', 'downloaded')
+        }
+        return redirect(`/item/${libraryItem.libraryItemId}?${queryParams.toString()}`)
+      }
+    } else if (!store.state.user.serverConnectionConfig) {
+      // Not connected to server
+      return redirect('/?error=No server connection to get library item')
     }
 
-    // Include episode downloads for podcasts
-    var item = await app.$axios.$get(`/api/items/${params.id}?expanded=1&include=downloads,rssfeed,share`).catch((error) => {
-      console.error('Failed', error)
-      return false
-    })
-    if (!item) {
-      console.error('No item...', params.id)
-      return redirect('/')
-    }
-    if (store.state.libraries.currentLibraryId !== item.libraryId || !store.state.libraries.filterData) {
-      await store.dispatch('libraries/fetch', item.libraryId)
-    }
     return {
-      libraryItem: item,
-      rssFeed: item.rssFeed || null,
-      mediaItemShare: item.mediaItemShare || null
+      libraryItem,
+      libraryItemId
     }
   },
   data() {
     return {
-      resettingProgress: false,
-      isProcessingReadUpdate: false,
-      fetchingRSSFeed: false,
-      showPodcastEpisodeFeed: false,
-      podcastFeedEpisodes: [],
-      episodesDownloading: [],
-      episodeDownloadsQueued: [],
-      showBookmarksModal: false,
-      isDescriptionClamped: false,
-      showFullDescription: false
+      processing: false,
+      showSelectLocalFolder: false,
+      showMoreMenu: false,
+      showFullscreenCover: false,
+      coverRgb: null,
+      coverBgIsLight: false,
+      windowWidth: 0,
+      descriptionClamped: false,
+      showFullDescription: false,
+      episodeStartingPlayback: null,
+      startingDownload: false
     }
   },
+  mixins: [cellularPermissionHelpers],
   computed: {
-    userToken() {
-      return this.$store.getters['user/getToken']
+    isIos() {
+      return this.$platform === 'ios'
     },
-    downloadUrl() {
-      return `${process.env.serverUrl}/api/items/${this.libraryItemId}/download?token=${this.userToken}`
-    },
-    dateFormat() {
-      return this.$store.state.serverSettings.dateFormat
+    userCanDownload() {
+      return this.$store.getters['user/getUserCanDownload']
     },
     userIsAdminOrUp() {
       return this.$store.getters['user/getIsAdminOrUp']
     },
+    isLocal() {
+      return this.libraryItem.isLocal
+    },
+    isLocalOnly() {
+      // TODO: Remove the possibility to have local only on android
+      return this.isLocal && !this.libraryItem.libraryItemId
+    },
+    hasLocal() {
+      // Server library item has matching local library item
+      return this.isLocal || this.libraryItem.localLibraryItem
+    },
+    localLibraryItem() {
+      if (this.isLocal) return this.libraryItem
+      return this.libraryItem.localLibraryItem || null
+    },
+    localLibraryItemId() {
+      return this.localLibraryItem?.id || null
+    },
+    localLibraryItemEpisodes() {
+      if (!this.isPodcast || !this.localLibraryItem) return []
+      var podcastMedia = this.localLibraryItem.media
+      return podcastMedia?.episodes || []
+    },
+    serverLibraryItemId() {
+      if (!this.isLocal) return this.libraryItem.id
+      // Check if local library item is connected to the current server
+      if (!this.libraryItem.serverAddress || !this.libraryItem.libraryItemId) return null
+      if (this.currentServerAddress === this.libraryItem.serverAddress) {
+        return this.libraryItem.libraryItemId
+      }
+      return null
+    },
+    localLibraryItemServerConnectionConfigId() {
+      return this.localLibraryItem?.serverConnectionConfigId
+    },
+    currentServerAddress() {
+      return this.$store.getters['user/getServerAddress']
+    },
+    currentServerConnectionConfigId() {
+      return this.$store.getters['user/getServerConnectionConfigId']
+    },
+    /**
+     * User is currently connected to a server and this local library item has the same server address
+     */
+    isLocalMatchingServerAddress() {
+      if (this.isLocalOnly || !this.localLibraryItem || !this.currentServerAddress) return false
+      return this.localLibraryItem.serverAddress === this.currentServerAddress
+    },
+    /**
+     * User is currently connected to a server and this local library item has the same user id
+     */
+    isLocalMatchingUser() {
+      if (this.isLocalOnly || !this.localLibraryItem || !this.user) return false
+      return this.localLibraryItem.serverUserId === this.user.id || this.localLibraryItem.serverUserId === this.user.oldUserId
+    },
+    /**
+     * User is currently connected to a server and this local library item has the same connection config id
+     */
+    isLocalMatchingConnectionConfig() {
+      if (this.isLocalOnly || !this.localLibraryItemServerConnectionConfigId || !this.currentServerConnectionConfigId) return false
+      return this.localLibraryItemServerConnectionConfigId === this.currentServerConnectionConfigId
+    },
     bookCoverAspectRatio() {
       return this.$store.getters['libraries/getBookCoverAspectRatio']
     },
-    bookCoverWidth() {
-      return 208
+    rssFeed() {
+      return this.libraryItem?.rssFeed
     },
-    isDeveloperMode() {
-      return this.$store.state.developerMode
-    },
-    isFile() {
-      return this.libraryItem.isFile
-    },
-    isBook() {
-      return this.libraryItem.mediaType === 'book'
+    mediaType() {
+      return this.libraryItem.mediaType
     },
     isPodcast() {
-      return this.libraryItem.mediaType === 'podcast'
+      return this.mediaType == 'podcast'
+    },
+    media() {
+      return this.libraryItem.media || {}
+    },
+    tags() {
+      return this.media.tags || []
+    },
+    mediaMetadata() {
+      return this.media.metadata || {}
+    },
+    title() {
+      return this.mediaMetadata.title
+    },
+    subtitle() {
+      return this.mediaMetadata.subtitle
+    },
+    genres() {
+      return this.mediaMetadata.genres || []
+    },
+    publishedYear() {
+      return this.mediaMetadata.publishedYear
+    },
+    podcastType() {
+      return this.mediaMetadata.type
+    },
+    podcastAuthor() {
+      if (!this.isPodcast) return null
+      return this.mediaMetadata.author || ''
+    },
+    bookAuthors() {
+      if (this.isPodcast) return null
+      return this.mediaMetadata.authors || []
+    },
+    narrators() {
+      if (this.isPodcast) return null
+      return this.mediaMetadata.narrators || []
+    },
+    description() {
+      return this.mediaMetadata.description || ''
+    },
+    series() {
+      return this.mediaMetadata.series || []
+    },
+    seriesList() {
+      if (this.isPodcast) return null
+      return this.series.map((se) => {
+        var text = se.name
+        if (se.sequence) text += ` #${se.sequence}`
+        return {
+          ...se,
+          text
+        }
+      })
+    },
+    duration() {
+      return this.media.duration
+    },
+    user() {
+      return this.$store.state.user.user
+    },
+    userToken() {
+      return this.$store.getters['user/getToken']
+    },
+    userItemProgress() {
+      if (this.isPodcast) return null
+      if (this.isLocal) return this.localItemProgress
+      return this.serverItemProgress
+    },
+    localItemProgress() {
+      if (this.isPodcast) return null
+      return this.$store.getters['globals/getLocalMediaProgressById'](this.localLibraryItemId)
+    },
+    serverItemProgress() {
+      if (this.isPodcast) return null
+      return this.$store.getters['user/getUserMediaProgress'](this.serverLibraryItemId)
+    },
+    userIsFinished() {
+      return !!this.userItemProgress?.isFinished
+    },
+    userTimeRemaining() {
+      if (!this.userItemProgress) return 0
+      const duration = this.userItemProgress.duration || this.duration
+      return duration - this.userItemProgress.currentTime
+    },
+    useEBookProgress() {
+      if (!this.userItemProgress || this.userItemProgress.progress) return false
+      return this.userItemProgress.ebookProgress > 0
+    },
+    progressPercent() {
+      if (this.useEBookProgress) return Math.max(Math.min(1, this.userItemProgress.ebookProgress), 0)
+      return Math.max(Math.min(1, this.userItemProgress?.progress || 0), 0)
+    },
+    userProgressFinishedAt() {
+      return this.userItemProgress?.finishedAt || 0
+    },
+    isStreaming() {
+      return this.isPlaying && !this.$store.getters['getIsCurrentSessionLocal']
+    },
+    isPlaying() {
+      if (this.localLibraryItemId && this.$store.getters['getIsMediaStreaming'](this.localLibraryItemId)) return true
+      return this.$store.getters['getIsMediaStreaming'](this.libraryItemId)
+    },
+    playerIsPlaying() {
+      return this.$store.state.playerIsPlaying && (this.isStreaming || this.isPlaying)
+    },
+    playerIsStartingPlayback() {
+      // Play has been pressed and waiting for native play response
+      return this.$store.state.playerIsStartingPlayback
+    },
+    playerIsStartingForThisMedia() {
+      const mediaId = this.$store.state.playerStartingPlaybackMediaId
+      if (!mediaId) return false
+
+      if (this.isPodcast) {
+        return mediaId === this.episodeStartingPlayback
+      } else {
+        return mediaId === this.serverLibraryItemId || mediaId === this.localLibraryItemId
+      }
+    },
+    tracks() {
+      return this.media.tracks || []
+    },
+    numTracks() {
+      return this.tracks.length || 0
+    },
+    numChapters() {
+      if (!this.media.chapters) return 0
+      return this.media.chapters.length || 0
     },
     isMissing() {
       return this.libraryItem.isMissing
@@ -224,77 +444,15 @@ export default {
     isExplicit() {
       return !!this.mediaMetadata.explicit
     },
-    isAbridged() {
-      return !!this.mediaMetadata.abridged
+    showPlay() {
+      return !this.isMissing && !this.isInvalid && (this.numTracks || this.episodes.length)
     },
-    showPlayButton() {
-      if (this.isMissing || this.isInvalid) return false
-      if (this.isPodcast) return this.podcastEpisodes.length
-      return this.tracks.length
-    },
-    showReadButton() {
+    showRead() {
       return this.ebookFile
     },
-    libraryId() {
-      return this.libraryItem.libraryId
-    },
-    libraryItemId() {
-      return this.libraryItem.id
-    },
-    media() {
-      return this.libraryItem.media || {}
-    },
-    mediaMetadata() {
-      return this.media.metadata || {}
-    },
-    chapters() {
-      return this.media.chapters || []
-    },
-    bookmarks() {
-      if (this.isPodcast) return []
-      return this.$store.getters['user/getUserBookmarksForItem'](this.libraryItemId)
-    },
-    tracks() {
-      return this.media.tracks || []
-    },
-    tracksWithAudioFile() {
-      return this.tracks.map((track) => {
-        track.audioFile = this.media.audioFiles?.find((af) => af.metadata.path === track.metadata.path)
-        return track
-      })
-    },
-    podcastEpisodes() {
-      return this.media.episodes || []
-    },
-    title() {
-      return this.mediaMetadata.title || 'No Title'
-    },
-    bookSubtitle() {
-      if (this.isPodcast) return null
-      return this.mediaMetadata.subtitle
-    },
-    podcastAuthor() {
-      return this.mediaMetadata.author || 'Unknown'
-    },
-    authors() {
-      return this.mediaMetadata.authors || []
-    },
-    series() {
-      return this.mediaMetadata.series || []
-    },
-    seriesList() {
-      return this.series.map((se) => {
-        let text = se.name
-        if (se.sequence) text += ` #${se.sequence}`
-        return {
-          ...se,
-          text
-        }
-      })
-    },
-    duration() {
-      if (!this.tracks.length) return 0
-      return this.media.duration
+    showDownload() {
+      if (this.isPodcast || this.hasLocal) return false
+      return this.user && this.userCanDownload && (this.showPlay || this.showRead)
     },
     libraryFiles() {
       return this.libraryItem.libraryFiles || []
@@ -305,510 +463,369 @@ export default {
     ebookFile() {
       return this.media.ebookFile
     },
-    description() {
-      return this.mediaMetadata.description || ''
+    ebookFormat() {
+      if (!this.ebookFile) return null
+      return this.ebookFile.ebookFormat
     },
-    userMediaProgress() {
-      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId)
+    downloadItem() {
+      return this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
     },
-    userIsFinished() {
-      return this.userMediaProgress ? !!this.userMediaProgress.isFinished : false
+    episodes() {
+      return this.media.episodes || []
     },
-    userTimeRemaining() {
-      if (!this.userMediaProgress) return 0
-      const duration = this.userMediaProgress.duration || this.duration
-      return duration - this.userMediaProgress.currentTime
+    isCasting() {
+      return this.$store.state.isCasting
     },
-    useEBookProgress() {
-      if (!this.userMediaProgress || this.userMediaProgress.progress) return false
-      return this.userMediaProgress.ebookProgress > 0
-    },
-    progressPercent() {
-      if (this.useEBookProgress) return Math.max(Math.min(1, this.userMediaProgress.ebookProgress), 0)
-      return this.userMediaProgress ? Math.max(Math.min(1, this.userMediaProgress.progress), 0) : 0
-    },
-    userProgressStartedAt() {
-      return this.userMediaProgress ? this.userMediaProgress.startedAt : 0
-    },
-    userProgressFinishedAt() {
-      return this.userMediaProgress ? this.userMediaProgress.finishedAt : 0
-    },
-    streamLibraryItem() {
-      return this.$store.state.streamLibraryItem
-    },
-    isStreaming() {
-      return this.streamLibraryItem && this.streamLibraryItem.id === this.libraryItemId
-    },
-    isQueued() {
-      return this.$store.getters['getIsMediaQueued'](this.libraryItemId)
-    },
-    userCanUpdate() {
-      return this.$store.getters['user/getUserCanUpdate']
-    },
-    userCanDelete() {
-      return this.$store.getters['user/getUserCanDelete']
-    },
-    userCanDownload() {
-      return this.$store.getters['user/getUserCanDownload']
-    },
-    showRssFeedBtn() {
-      if (!this.rssFeed && !this.podcastEpisodes.length && !this.tracks.length) return false // Cannot open RSS feed with no episodes/tracks
+    coverWidth() {
+      let width = this.windowWidth - 94
+      if (width > 325) return 325
+      else if (width < 0) return 175
 
-      // If rss feed is open then show feed url to users otherwise just show to admins
-      return this.userIsAdminOrUp || this.rssFeed
+      if (width * this.bookCoverAspectRatio > 325) width = 325 / this.bookCoverAspectRatio
+      return width
     },
-    showQueueBtn() {
-      if (!this.isBook) return false
-      return !this.$store.getters['getIsStreamingFromDifferentLibrary'] && this.streamLibraryItem
-    },
-    showCollectionsButton() {
-      return this.isBook && this.userCanUpdate
-    },
-    contextMenuItems() {
-      const items = []
-
-      if (this.showCollectionsButton) {
-        items.push({
-          text: this.$strings.LabelCollections,
-          action: 'collections'
-        })
-      }
-
-      if (!this.isPodcast && this.tracks.length) {
-        items.push({
-          text: this.$strings.LabelYourPlaylists,
-          action: 'playlists'
-        })
-      }
-
-      if (this.bookmarks.length) {
-        items.push({
-          text: this.$strings.LabelYourBookmarks,
-          action: 'bookmarks'
-        })
-      }
-
-      if (this.showRssFeedBtn) {
-        items.push({
-          text: this.$strings.LabelOpenRSSFeed,
-          action: 'rss-feeds'
-        })
-      }
-
-      if (this.userCanDownload) {
-        items.push({
-          text: this.$strings.LabelDownload,
-          action: 'download'
-        })
-      }
-
-      if (this.ebookFile && this.$store.state.libraries.ereaderDevices?.length) {
-        items.push({
-          text: this.$strings.LabelSendEbookToDevice,
-          subitems: this.$store.state.libraries.ereaderDevices.map((d) => {
-            return {
-              text: d.name,
-              action: 'sendToDevice',
-              data: d.name
-            }
-          })
-        })
-      }
-
-      if (this.userIsAdminOrUp && !this.isPodcast && this.tracks.length) {
-        items.push({
-          text: this.$strings.LabelShare,
-          action: 'share'
-        })
-      }
-
-      if (this.userCanDelete) {
-        items.push({
-          text: this.$strings.ButtonDelete,
-          action: 'delete'
-        })
-      }
-
-      return items
+    coverHeight() {
+      return this.coverWidth * this.bookCoverAspectRatio
     }
   },
   methods: {
-    selectBookmark(bookmark) {
-      if (!bookmark) return
-      if (this.isStreaming) {
-        this.$eventBus.$emit('playback-seek', bookmark.time)
-      } else if (this.streamLibraryItem) {
-        this.showBookmarksModal = false
-        console.log('Already streaming library item so ask about it')
-        const payload = {
-          message: `Start playback for "${this.title}" at ${this.$secondsToTimestamp(bookmark.time)}?`,
-          callback: (confirmed) => {
-            if (confirmed) {
-              this.playItem(bookmark.time)
-            }
-          },
-          type: 'yesNo'
-        }
-        this.$store.commit('globals/setConfirmPrompt', payload)
+    async coverImageLoaded(fullCoverUrl) {
+      if (!fullCoverUrl) return
+
+      const fac = new FastAverageColor()
+      fac
+        .getColorAsync(fullCoverUrl)
+        .then((color) => {
+          this.coverRgb = color.rgba
+          this.coverBgIsLight = color.isLight
+        })
+        .catch((e) => {
+          console.log(e)
+        })
+    },
+    moreButtonPress() {
+      this.showMoreMenu = true
+    },
+    readBook() {
+      if (this.localLibraryItem?.media?.ebookFile) {
+        // Has local ebook file
+        this.$store.commit('showReader', { libraryItem: this.localLibraryItem, keepProgress: true })
       } else {
-        this.playItem(bookmark.time)
-      }
-      this.showBookmarksModal = false
-    },
-    clearDownloadQueue() {
-      if (confirm('Are you sure you want to clear episode download queue?')) {
-        this.$axios
-          .$get(`/api/podcasts/${this.libraryItemId}/clear-queue`)
-          .then(() => {
-            this.$toast.success(this.$strings.ToastEpisodeDownloadQueueClearSuccess)
-            this.episodeDownloadQueued = []
-          })
-          .catch((error) => {
-            console.error('Failed to clear queue', error)
-            this.$toast.error(this.$strings.ToastEpisodeDownloadQueueClearFailed)
-          })
+        this.$store.commit('showReader', { libraryItem: this.libraryItem, keepProgress: true })
       }
     },
-    async findEpisodesClick() {
-      if (!this.mediaMetadata.feedUrl) {
-        return this.$toast.error(this.$strings.ToastNoRSSFeed)
+    playAtTimestamp(seconds) {
+      this.play(seconds)
+    },
+    async playClick() {
+      await this.$hapticsImpact()
+      if (this.playerIsPlaying) {
+        this.$eventBus.$emit('pause-item')
+      } else {
+        this.play()
       }
-      this.fetchingRSSFeed = true
-      var payload = await this.$axios.$post(`/api/podcasts/feed`, { rssFeed: this.mediaMetadata.feedUrl }).catch((error) => {
-        console.error('Failed to get feed', error)
-        this.$toast.error(this.$strings.ToastPodcastGetFeedFailed)
-        return null
-      })
-      this.fetchingRSSFeed = false
-      if (!payload) return
+    },
+    async play(startTime = null) {
+      if (this.playerIsStartingPlayback) return
 
-      console.log('Podcast feed', payload)
-      const podcastfeed = payload.podcast
-      if (!podcastfeed.episodes || !podcastfeed.episodes.length) {
-        this.$toast.info(this.$strings.ToastPodcastNoEpisodesInFeed)
-        return
-      }
-
-      this.podcastFeedEpisodes = podcastfeed.episodes
-      this.showPodcastEpisodeFeed = true
-    },
-    showEditCover() {
-      this.$store.commit('setBookshelfBookIds', [])
-      this.$store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'cover' })
-    },
-    openEbook() {
-      this.$store.commit('showEReader', { libraryItem: this.libraryItem, keepProgress: true })
-    },
-    toggleFinished(confirmed = false) {
-      if (!this.userIsFinished && this.progressPercent > 0 && !confirmed) {
-        const payload = {
-          message: `Are you sure you want to mark "${this.title}" as finished?`,
-          callback: (confirmed) => {
-            if (confirmed) {
-              this.toggleFinished(true)
-            }
-          },
-          type: 'yesNo'
-        }
-        this.$store.commit('globals/setConfirmPrompt', payload)
-        return
-      }
-
-      var updatePayload = {
-        isFinished: !this.userIsFinished
-      }
-      this.isProcessingReadUpdate = true
-      this.$axios
-        .$patch(`/api/me/progress/${this.libraryItemId}`, updatePayload)
-        .then(() => {
-          this.isProcessingReadUpdate = false
-        })
-        .catch((error) => {
-          console.error('Failed', error)
-          this.isProcessingReadUpdate = false
-          this.$toast.error(updatePayload.isFinished ? this.$strings.ToastItemMarkedAsFinishedFailed : this.$strings.ToastItemMarkedAsNotFinishedFailed)
-        })
-    },
-    playItem(startTime = null) {
-      let episodeId = null
-      const queueItems = []
       if (this.isPodcast) {
-        const episodesInListeningOrder = this.podcastEpisodes.map((ep) => ({ ...ep })).sort((a, b) => String(a.publishedAt).localeCompare(String(b.publishedAt), undefined, { numeric: true, sensitivity: 'base' }))
-
-        // Find most recent episode unplayed
-        let episodeIndex = episodesInListeningOrder.findLastIndex((ep) => {
-          const podcastProgress = this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, ep.id)
-          return !podcastProgress || !podcastProgress.isFinished
+        this.episodes.sort((a, b) => {
+          return String(b.publishedAt).localeCompare(String(a.publishedAt), undefined, { numeric: true, sensitivity: 'base' })
         })
-        if (episodeIndex < 0) episodeIndex = 0
 
-        episodeId = episodesInListeningOrder[episodeIndex].id
-
-        for (let i = episodeIndex; i < episodesInListeningOrder.length; i++) {
-          const episode = episodesInListeningOrder[i]
-          const podcastProgress = this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, episode.id)
-          if (!podcastProgress || !podcastProgress.isFinished) {
-            queueItems.push({
-              libraryItemId: this.libraryItemId,
-              libraryId: this.libraryId,
-              episodeId: episode.id,
-              title: episode.title,
-              subtitle: this.title,
-              caption: episode.publishedAt ? this.$getString('LabelPublishedDate', [this.$formatDate(episode.publishedAt, this.dateFormat)]) : this.$strings.LabelUnknownPublishDate,
-              duration: episode.audioFile.duration || null,
-              coverPath: this.libraryItem.media.coverPath || null
-            })
+        let episode = this.episodes.find((ep) => {
+          var podcastProgress = null
+          if (!this.isLocal) {
+            podcastProgress = this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, ep.id)
+          } else {
+            podcastProgress = this.$store.getters['globals/getLocalMediaProgressById'](this.libraryItemId, ep.id)
           }
+          return !podcastProgress?.isFinished
+        })
+
+        if (!episode) episode = this.episodes[0]
+
+        const episodeId = episode.id
+
+        let localEpisode = null
+        if (this.hasLocal && !this.isLocal) {
+          localEpisode = this.localLibraryItem.media.episodes.find((ep) => ep.serverEpisodeId == episodeId)
+        } else if (this.isLocal) {
+          localEpisode = episode
+        }
+        const serverEpisodeId = !this.isLocal ? episodeId : localEpisode?.serverEpisodeId || null
+
+        this.episodeStartingPlayback = serverEpisodeId
+        this.$store.commit('setPlayerIsStartingPlayback', serverEpisodeId)
+        if (serverEpisodeId && this.serverLibraryItemId && this.isCasting) {
+          // If casting and connected to server for local library item then send server library item id
+          this.$eventBus.$emit('play-item', { libraryItemId: this.serverLibraryItemId, episodeId: serverEpisodeId })
+        } else if (localEpisode) {
+          this.$eventBus.$emit('play-item', { libraryItemId: this.localLibraryItem.id, episodeId: localEpisode.id, serverLibraryItemId: this.serverLibraryItemId, serverEpisodeId })
+        } else {
+          this.$eventBus.$emit('play-item', { libraryItemId: this.libraryItemId, episodeId })
         }
       } else {
-        const queueItem = {
-          libraryItemId: this.libraryItemId,
-          libraryId: this.libraryId,
-          episodeId: null,
-          title: this.title,
-          subtitle: this.authors.map((au) => au.name).join(', '),
-          caption: '',
-          duration: this.duration || null,
-          coverPath: this.media.coverPath || null
+        // Audiobook
+        let libraryItemId = this.libraryItemId
+
+        // When casting use server library item
+        if (this.hasLocal && this.serverLibraryItemId && this.isCasting) {
+          libraryItemId = this.serverLibraryItemId
+        } else if (this.hasLocal) {
+          libraryItemId = this.localLibraryItem.id
         }
-        queueItems.push(queueItem)
+
+        // If start time and is not already streaming then ask for confirmation
+        if (startTime !== null && startTime !== undefined && !this.$store.getters['getIsMediaStreaming'](libraryItemId, null)) {
+          const { value } = await Dialog.confirm({
+            title: 'Confirm',
+            message: `Start playback for "${this.title}" at ${this.$secondsToTimestamp(startTime)}?`
+          })
+          if (!value) return
+        }
+
+        this.$store.commit('setPlayerIsStartingPlayback', libraryItemId)
+        this.$eventBus.$emit('play-item', { libraryItemId, serverLibraryItemId: this.serverLibraryItemId, startTime })
+      }
+    },
+    itemUpdated(libraryItem) {
+      if (libraryItem.id === this.serverLibraryItemId) {
+        console.log('Item Updated')
+        this.libraryItem = libraryItem
+        this.checkDescriptionClamped()
+      }
+    },
+    async selectFolder() {
+      // Select and save the local folder for media type
+      var folderObj = await AbsFileSystem.selectFolder({ mediaType: this.mediaType })
+      if (folderObj.error) {
+        return this.$toast.error(`Error: ${folderObj.error || 'Unknown Error'}`)
+      }
+      return folderObj
+    },
+    selectedLocalFolder(localFolder) {
+      this.showSelectLocalFolder = false
+      this.download(localFolder)
+    },
+    async downloadClick() {
+      if (this.downloadItem || this.startingDownload) return
+
+      const hasPermission = await this.checkCellularPermission('download')
+      if (!hasPermission) return
+
+      this.startingDownload = true
+      setTimeout(() => {
+        this.startingDownload = false
+      }, 1000)
+
+      await this.$hapticsImpact()
+      if (this.isIos) {
+        // no local folders on iOS
+        this.startDownload()
+      } else {
+        this.download()
+      }
+    },
+    async download(selectedLocalFolder = null) {
+      // Get the local folder to download to
+      let localFolder = selectedLocalFolder
+      if (!localFolder) {
+        const localFolders = (await this.$db.getLocalFolders()) || []
+        console.log('Local folders loaded', localFolders.length)
+        const foldersWithMediaType = localFolders.filter((lf) => {
+          console.log('Checking local folder', lf.mediaType)
+          return lf.mediaType == this.mediaType
+        })
+        console.log('Folders with media type', this.mediaType, foldersWithMediaType.length)
+        const internalStorageFolder = foldersWithMediaType.find((f) => f.id === `internal-${this.mediaType}`)
+        if (!foldersWithMediaType.length) {
+          localFolder = {
+            id: `internal-${this.mediaType}`,
+            name: this.$strings.LabelInternalAppStorage,
+            mediaType: this.mediaType
+          }
+        } else if (foldersWithMediaType.length === 1 && internalStorageFolder) {
+          localFolder = internalStorageFolder
+        } else {
+          this.$store.commit('globals/showSelectLocalFolderModal', {
+            mediaType: this.mediaType,
+            callback: (folder) => {
+              this.download(folder)
+            }
+          })
+          return
+        }
       }
 
-      this.$eventBus.$emit('play-item', {
-        libraryItemId: this.libraryItem.id,
-        episodeId,
-        startTime,
-        queueItems
+      console.log('Local folder', JSON.stringify(localFolder))
+      let startDownloadMessage = `Start download for "${this.title}" with ${this.numTracks} audio track${this.numTracks == 1 ? '' : 's'} to folder ${localFolder.name}?`
+      if (!this.isIos && this.showRead) {
+        if (this.numTracks > 0) {
+          startDownloadMessage = `Start download for "${this.title}" with ${this.numTracks} audio track${this.numTracks == 1 ? '' : 's'} and ebook file to folder ${localFolder.name}?`
+        } else {
+          startDownloadMessage = `Start download for "${this.title}" with ebook file to folder ${localFolder.name}?`
+        }
+      }
+      const { value } = await Dialog.confirm({
+        title: 'Confirm',
+        message: startDownloadMessage
       })
+      if (value) {
+        this.startDownload(localFolder)
+      }
     },
-    editClick() {
-      this.$store.commit('setBookshelfBookIds', [])
-      this.$store.commit('showEditModal', this.libraryItem)
+    async startDownload(localFolder = null) {
+      const payload = {
+        libraryItemId: this.libraryItemId
+      }
+      if (localFolder) {
+        console.log('Starting download to local folder', localFolder.name)
+        payload.localFolderId = localFolder.id
+      }
+      var downloadRes = await AbsDownloader.downloadLibraryItem(payload)
+      if (downloadRes && downloadRes.error) {
+        var errorMsg = downloadRes.error || 'Unknown error'
+        console.error('Download error', errorMsg)
+        this.$toast.error(errorMsg)
+      }
+    },
+    newLocalLibraryItem(item) {
+      if (item.libraryItemId == this.libraryItemId) {
+        console.log('New local library item', item.id)
+        this.$set(this.libraryItem, 'localLibraryItem', item)
+      }
+    },
+    libraryChanged(libraryId) {
+      if (this.libraryItem.libraryId !== libraryId) {
+        this.$router.replace('/bookshelf')
+      }
     },
     checkDescriptionClamped() {
-      if (!this.$refs.description) return
-      this.isDescriptionClamped = this.$refs.description.scrollHeight > this.$refs.description.clientHeight
-    },
-    libraryItemUpdated(libraryItem) {
-      if (libraryItem.id === this.libraryItemId) {
-        console.log('Item was updated', libraryItem)
-        this.libraryItem = libraryItem
-        this.$nextTick(this.checkDescriptionClamped)
+      if (this.showFullDescription) return
+      if (!this.$refs.description) {
+        this.descriptionClamped = false
+      } else {
+        this.descriptionClamped = this.$refs.description.scrollHeight > this.$refs.description.clientHeight
       }
     },
-    clearProgressClick() {
-      if (!this.userMediaProgress) return
-      if (confirm(this.$strings.MessageConfirmResetProgress)) {
-        this.resettingProgress = true
-        this.$axios
-          .$delete(`/api/me/progress/${this.userMediaProgress.id}`)
-          .then(() => {
-            console.log('Progress reset complete')
-            this.resettingProgress = false
-          })
-          .catch((error) => {
-            console.error('Progress reset failed', error)
-            this.resettingProgress = false
-          })
-      }
-    },
-    clickRSSFeed() {
-      this.$store.commit('globals/setRSSFeedOpenCloseModal', {
-        id: this.libraryItemId,
-        name: this.title,
-        type: 'item',
-        feed: this.rssFeed,
-        hasEpisodesWithoutPubDate: this.podcastEpisodes.some((ep) => !ep.pubDate)
-      })
-    },
-    episodeDownloadQueued(episodeDownload) {
-      if (episodeDownload.libraryItemId === this.libraryItemId) {
-        this.episodeDownloadsQueued.push(episodeDownload)
-      }
-    },
-    episodeDownloadStarted(episodeDownload) {
-      if (episodeDownload.libraryItemId === this.libraryItemId) {
-        this.episodeDownloadsQueued = this.episodeDownloadsQueued.filter((d) => d.id !== episodeDownload.id)
-        this.episodesDownloading.push(episodeDownload)
-      }
-    },
-    episodeDownloadFinished(episodeDownload) {
-      if (episodeDownload.libraryItemId === this.libraryItemId) {
-        this.episodeDownloadsQueued = this.episodeDownloadsQueued.filter((d) => d.id !== episodeDownload.id)
-        this.episodesDownloading = this.episodesDownloading.filter((d) => d.id !== episodeDownload.id)
-      }
-    },
-    episodeDownloadQueueCleared(libraryItemId) {
-      if (libraryItemId === this.libraryItemId) {
-        this.episodeDownloadsQueued = []
-      }
+    windowResized() {
+      this.windowWidth = window.innerWidth
+      this.checkDescriptionClamped()
     },
     rssFeedOpen(data) {
-      if (data.entityId === this.libraryItemId) {
+      if (data.entityId === this.serverLibraryItemId) {
         console.log('RSS Feed Opened', data)
         this.rssFeed = data
       }
     },
     rssFeedClosed(data) {
-      if (data.entityId === this.libraryItemId) {
+      if (data.entityId === this.serverLibraryItemId) {
         console.log('RSS Feed Closed', data)
         this.rssFeed = null
       }
     },
-    shareOpen(mediaItemShare) {
-      if (mediaItemShare.mediaItemId === this.media.id) {
-        this.mediaItemShare = mediaItemShare
-      }
+    async setLibrary() {
+      if (!this.libraryItem.libraryId) return
+      await this.$store.dispatch('libraries/fetch', this.libraryItem.libraryId)
+      this.$localStore.setLastLibraryId(this.libraryItem.libraryId)
     },
-    shareClosed(mediaItemShare) {
-      if (mediaItemShare.mediaItemId === this.media.id) {
-        this.mediaItemShare = null
+    init() {
+      // If library of this item is different from current library then switch libraries
+      if (this.$store.state.libraries.currentLibraryId !== this.libraryItem.libraryId) {
+        this.setLibrary()
       }
-    },
-    queueBtnClick() {
-      if (this.isQueued) {
-        // Remove from queue
-        this.$store.commit('removeItemFromQueue', { libraryItemId: this.libraryItemId })
-      } else {
-        // Add to queue
 
-        const queueItem = {
-          libraryItemId: this.libraryItemId,
-          libraryId: this.libraryId,
-          episodeId: null,
-          title: this.title,
-          subtitle: this.authors.map((au) => au.name).join(', '),
-          caption: '',
-          duration: this.duration || null,
-          coverPath: this.media.coverPath || null
+      this.windowWidth = window.innerWidth
+      window.addEventListener('resize', this.windowResized)
+      this.$eventBus.$on('library-changed', this.libraryChanged)
+      this.$eventBus.$on('new-local-library-item', this.newLocalLibraryItem)
+      this.$socket.$on('item_updated', this.itemUpdated)
+      this.$socket.$on('rss_feed_open', this.rssFeedOpen)
+      this.$socket.$on('rss_feed_closed', this.rssFeedClosed)
+      this.checkDescriptionClamped()
+
+      // Set height of page below cover image
+      const itemPageBgGradientHeight = window.outerHeight - 64 - this.coverHeight
+      document.documentElement.style.setProperty('--item-page-bg-gradient-height', itemPageBgGradientHeight + 'px')
+
+      // Set last scroll position if was set for this item
+      if (this.$store.state.lastItemScrollData.id === this.libraryItemId && window['item-page']) {
+        window['item-page'].scrollTop = this.$store.state.lastItemScrollData.scrollTop || 0
+      }
+    },
+    async loadServerLibraryItem() {
+      console.log(`Fetching library item "${this.libraryItemId}" from server`)
+      const libraryItem = await this.$nativeHttp.get(`/api/items/${this.libraryItemId}?expanded=1&include=rssfeed`, { connectTimeout: 5000 }).catch((error) => {
+        console.error('Failed', error)
+        return null
+      })
+
+      if (libraryItem) {
+        const localLibraryItem = await this.$db.getLocalLibraryItemByLId(this.libraryItemId)
+        if (localLibraryItem) {
+          console.log('Library item has local library item also', localLibraryItem.id)
+          libraryItem.localLibraryItem = localLibraryItem
         }
-        this.$store.commit('addItemToQueue', queueItem)
-      }
-    },
-    downloadLibraryItem() {
-      this.$downloadFile(this.downloadUrl)
-    },
-    deleteLibraryItem() {
-      const payload = {
-        message: this.$strings.MessageConfirmDeleteLibraryItem,
-        checkboxLabel: this.$strings.LabelDeleteFromFileSystemCheckbox,
-        yesButtonText: this.$strings.ButtonDelete,
-        yesButtonColor: 'error',
-        checkboxDefaultValue: !Number(localStorage.getItem('softDeleteDefault') || 0),
-        callback: (confirmed, hardDelete) => {
-          if (confirmed) {
-            localStorage.setItem('softDeleteDefault', hardDelete ? 0 : 1)
-
-            this.$axios
-              .$delete(`/api/items/${this.libraryItemId}?hard=${hardDelete ? 1 : 0}`)
-              .then(() => {
-                this.$toast.success(this.$strings.ToastItemDeletedSuccess)
-                this.$router.replace(`/library/${this.libraryId}`)
-              })
-              .catch((error) => {
-                console.error('Failed to delete item', error)
-                this.$toast.error(this.$strings.ToastItemDeleteFailed)
-              })
-          }
-        },
-        type: 'yesNo'
-      }
-      this.$store.commit('globals/setConfirmPrompt', payload)
-    },
-    sendToDevice(deviceName) {
-      const payload = {
-        message: this.$getString('MessageConfirmSendEbookToDevice', [this.ebookFile.ebookFormat, this.title, deviceName]),
-        callback: (confirmed) => {
-          if (confirmed) {
-            const payload = {
-              libraryItemId: this.libraryItemId,
-              deviceName
-            }
-            this.processing = true
-            this.$axios
-              .$post(`/api/emails/send-ebook-to-device`, payload)
-              .then(() => {
-                this.$toast.success(this.$getString('ToastSendEbookToDeviceSuccess', [deviceName]))
-              })
-              .catch((error) => {
-                console.error('Failed to send ebook to device', error)
-                this.$toast.error(this.$strings.ToastSendEbookToDeviceFailed)
-              })
-              .finally(() => {
-                this.processing = false
-              })
-          }
-        },
-        type: 'yesNo'
-      }
-      this.$store.commit('globals/setConfirmPrompt', payload)
-    },
-    contextMenuAction({ action, data }) {
-      if (action === 'collections') {
-        this.$store.commit('setSelectedLibraryItem', this.libraryItem)
-        this.$store.commit('globals/setShowCollectionsModal', true)
-      } else if (action === 'playlists') {
-        this.$store.commit('globals/setSelectedPlaylistItems', [{ libraryItem: this.libraryItem }])
-        this.$store.commit('globals/setShowPlaylistsModal', true)
-      } else if (action === 'bookmarks') {
-        this.showBookmarksModal = true
-      } else if (action === 'rss-feeds') {
-        this.clickRSSFeed()
-      } else if (action === 'download') {
-        this.downloadLibraryItem()
-      } else if (action === 'delete') {
-        this.deleteLibraryItem()
-      } else if (action === 'sendToDevice') {
-        this.sendToDevice(data)
-      } else if (action === 'share') {
-        this.$store.commit('setSelectedLibraryItem', this.libraryItem)
-        this.$store.commit('globals/setShareModal', this.mediaItemShare)
+        this.libraryItem = libraryItem
+      } else if (this.$route.query.localLibraryItemId) {
+        // Failed to get server library item but is local library item so redirect
+        return this.$router.replace(`/item/${this.$route.query.localLibraryItemId}?noredirect=1`)
+      } else {
+        this.$toast.error('Failed to get library item from server')
+        return this.$router.replace('/bookshelf')
       }
     }
   },
-  mounted() {
-    this.checkDescriptionClamped()
-
-    this.episodeDownloadsQueued = this.libraryItem.episodeDownloadsQueued || []
-    this.episodesDownloading = this.libraryItem.episodesDownloading || []
-
-    this.$eventBus.$on(`${this.libraryItem.id}_updated`, this.libraryItemUpdated)
-    this.$root.socket.on('item_updated', this.libraryItemUpdated)
-    this.$root.socket.on('rss_feed_open', this.rssFeedOpen)
-    this.$root.socket.on('rss_feed_closed', this.rssFeedClosed)
-    this.$root.socket.on('share_open', this.shareOpen)
-    this.$root.socket.on('share_closed', this.shareClosed)
-    this.$root.socket.on('episode_download_queued', this.episodeDownloadQueued)
-    this.$root.socket.on('episode_download_started', this.episodeDownloadStarted)
-    this.$root.socket.on('episode_download_finished', this.episodeDownloadFinished)
-    this.$root.socket.on('episode_download_queue_cleared', this.episodeDownloadQueueCleared)
+  async mounted() {
+    if (!this.libraryItem) {
+      await this.loadServerLibraryItem()
+    }
+    this.init()
   },
   beforeDestroy() {
-    this.$eventBus.$off(`${this.libraryItem.id}_updated`, this.libraryItemUpdated)
-    this.$root.socket.off('item_updated', this.libraryItemUpdated)
-    this.$root.socket.off('rss_feed_open', this.rssFeedOpen)
-    this.$root.socket.off('rss_feed_closed', this.rssFeedClosed)
-    this.$root.socket.off('share_open', this.shareOpen)
-    this.$root.socket.off('share_closed', this.shareClosed)
-    this.$root.socket.off('episode_download_queued', this.episodeDownloadQueued)
-    this.$root.socket.off('episode_download_started', this.episodeDownloadStarted)
-    this.$root.socket.off('episode_download_finished', this.episodeDownloadFinished)
-    this.$root.socket.off('episode_download_queue_cleared', this.episodeDownloadQueueCleared)
+    window.removeEventListener('resize', this.windowResized)
+    this.$eventBus.$off('library-changed', this.libraryChanged)
+    this.$eventBus.$off('new-local-library-item', this.newLocalLibraryItem)
+    this.$socket.$off('item_updated', this.itemUpdated)
+    this.$socket.$off('rss_feed_open', this.rssFeedOpen)
+    this.$socket.$off('rss_feed_closed', this.rssFeedClosed)
+
+    // Set scroll position
+    if (window['item-page']) {
+      this.$store.commit('setLastItemScrollData', { scrollTop: window['item-page'].scrollTop || 0, id: this.libraryItemId })
+    }
   }
 }
 </script>
 
-<style scoped>
-#item-description {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  max-height: 6.25rem;
-  transition: all 0.3s ease-in-out;
+<style>
+:root {
+  --item-page-bg-gradient-height: 100%;
 }
-#item-description.show-full {
-  -webkit-line-clamp: unset;
-  max-height: 999rem;
+
+#item-page-bg-gradient {
+  transition: opacity 0.5s ease-in-out;
+  height: var(--item-page-bg-gradient-height);
+}
+
+.title-container {
+  width: calc(100% - 64px);
+  max-width: calc(100% - 64px);
+}
+#coverBg > div {
+  width: 150vw !important;
+  max-width: 150vw !important;
+}
+
+@media only screen and (max-width: 500px) {
+  #metadata {
+    grid-template-columns: auto 1fr;
+  }
+}
+@media only screen and (min-width: 500px) {
+  #metadata {
+    grid-template-columns: auto 1fr auto 1fr;
+  }
 }
 </style>

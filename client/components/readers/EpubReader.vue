@@ -1,15 +1,11 @@
 <template>
-  <div id="epub-reader" class="h-full w-full">
-    <div class="h-full flex items-center justify-center">
-      <button type="button" aria-label="Previous page" class="w-24 max-w-24 h-full hidden sm:flex items-center overflow-x-hidden justify-center opacity-50 hover:opacity-100">
-        <span v-if="hasPrev" class="material-symbols text-6xl" @mousedown.prevent @click="prev">chevron_left</span>
-      </button>
-      <div id="frame" class="w-full" style="height: 80%">
-        <div id="viewer"></div>
-      </div>
-      <button type="button" aria-label="Next page" class="w-24 max-w-24 h-full hidden sm:flex items-center justify-center overflow-x-hidden opacity-50 hover:opacity-100">
-        <span v-if="hasNext" class="material-symbols text-6xl" @mousedown.prevent @click="next">chevron_right</span>
-      </button>
+  <div id="epub-frame" class="w-full">
+    <div id="viewer" class="h-full w-full"></div>
+
+    <div class="fixed left-0 h-8 w-full px-4 flex items-center" :class="isLightTheme ? 'bg-white text-black' : 'bg-[#232323] text-white/80'" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+      <p v-if="totalLocations" class="text-xs text-slate-600">Location {{ currentLocationNum }} of {{ totalLocations }}</p>
+      <div class="flex-grow" />
+      <p class="text-xs">{{ progress }}%</p>
     </div>
   </div>
 </template>
@@ -17,43 +13,39 @@
 <script>
 import ePub from 'epubjs'
 
-/**
- * @typedef {object} EpubReader
- * @property {ePub.Book} book
- * @property {ePub.Rendition} rendition
- */
 export default {
   props: {
+    url: String,
     libraryItem: {
       type: Object,
       default: () => {}
     },
-    playerOpen: Boolean,
-    keepProgress: Boolean,
-    fileId: String
+    isLocal: Boolean,
+    keepProgress: Boolean
   },
   data() {
     return {
-      windowWidth: 0,
-      windowHeight: 0,
       /** @type {ePub.Book} */
       book: null,
       /** @type {ePub.Rendition} */
       rendition: null,
-      chapters: [],
+      progress: 0,
+      totalLocations: 0,
+      currentLocationNum: 0,
+      currentLocationCfi: null,
+      inittingDisplay: true,
+      isRefreshingUI: false,
       ereaderSettings: {
         theme: 'dark',
-        font: 'serif',
         fontScale: 100,
         lineSpacing: 115,
-        spread: 'auto',
         textStroke: 0
       }
     }
   },
   watch: {
-    playerOpen() {
-      this.resize()
+    isPlayerOpen() {
+      this.refreshUI()
     }
   },
   computed: {
@@ -64,60 +56,66 @@ export default {
     libraryItemId() {
       return this.libraryItem?.id
     },
-    allowScriptedContent() {
-      return this.$store.getters['libraries/getLibraryEpubsAllowScriptedContent']
+    localLibraryItem() {
+      if (this.isLocal) return this.libraryItem
+      return this.libraryItem.localLibraryItem || null
     },
-    hasPrev() {
-      return !this.rendition?.location?.atStart
+    localLibraryItemId() {
+      return this.localLibraryItem?.id
     },
-    hasNext() {
-      return !this.rendition?.location?.atEnd
+    serverLibraryItemId() {
+      if (!this.isLocal) return this.libraryItem.id
+      // Check if local library item is connected to the current server
+      if (!this.libraryItem.serverAddress || !this.libraryItem.libraryItemId) return null
+      if (this.$store.getters['user/getServerAddress'] === this.libraryItem.serverAddress) {
+        return this.libraryItem.libraryItemId
+      }
+      return null
     },
-    userMediaProgress() {
-      if (!this.libraryItemId) return
-      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId)
+    isPlayerOpen() {
+      return this.$store.getters['getIsPlayerOpen']
     },
-    savedEbookLocation() {
-      if (!this.keepProgress) return null
-      if (!this.userMediaProgress?.ebookLocation) return null
-      // Validate ebookLocation is an epubcfi
-      if (!String(this.userMediaProgress.ebookLocation).startsWith('epubcfi')) return null
-      return this.userMediaProgress.ebookLocation
+    readerHeightOffset() {
+      return this.isPlayerOpen ? 204 : 104
+    },
+    /** @returns {Array<ePub.NavItem>} */
+    chapters() {
+      return this.book?.navigation?.toc || []
+    },
+    userItemProgress() {
+      if (this.isLocal) return this.localItemProgress
+      return this.serverItemProgress
+    },
+    localItemProgress() {
+      return this.$store.getters['globals/getLocalMediaProgressById'](this.localLibraryItemId)
+    },
+    serverItemProgress() {
+      return this.$store.getters['user/getUserMediaProgress'](this.serverLibraryItemId)
     },
     localStorageLocationsKey() {
       return `ebookLocations-${this.libraryItemId}`
     },
-    readerWidth() {
-      if (this.windowWidth < 640) return this.windowWidth
-      return this.windowWidth - 200
+    savedEbookLocation() {
+      if (!this.keepProgress) return null
+      if (!this.userItemProgress?.ebookLocation) return null
+      // Validate ebookLocation is an epubcfi
+      if (!String(this.userItemProgress.ebookLocation).startsWith('epubcfi')) return null
+      return this.userItemProgress.ebookLocation
     },
-    readerHeight() {
-      if (this.windowHeight < 400 || !this.playerOpen) return this.windowHeight
-      return this.windowHeight - 164
-    },
-    ebookUrl() {
-      if (this.fileId) {
-        return `/api/items/${this.libraryItemId}/ebook/${this.fileId}`
-      }
-      return `/api/items/${this.libraryItemId}/ebook`
+    isLightTheme() {
+      return this.ereaderSettings.theme === 'light'
     },
     themeRules() {
       const isDark = this.ereaderSettings.theme === 'dark'
       const fontColor = isDark ? '#fff' : '#000'
       const backgroundColor = isDark ? 'rgb(35 35 35)' : 'rgb(255, 255, 255)'
 
-      const lineSpacing = this.ereaderSettings.lineSpacing / 100
-
-      const fontScale = this.ereaderSettings.fontScale / 100
-
-      const textStroke = this.ereaderSettings.textStroke / 100
-
       return {
         '*': {
           color: `${fontColor}!important`,
           'background-color': `${backgroundColor}!important`,
-          'line-height': lineSpacing * fontScale + 'rem!important',
-          '-webkit-text-stroke': textStroke + 'px ' + fontColor + '!important'
+          'line-height': this.ereaderSettings.lineSpacing + '%!important',
+          '-webkit-text-stroke': this.ereaderSettings.textStroke/100 + 'px ' + fontColor + '!important'
         },
         a: {
           color: `${fontColor}!important`
@@ -135,61 +133,19 @@ export default {
 
       const fontScale = settings.fontScale || 100
       this.rendition.themes.fontSize(`${fontScale}%`)
-      this.rendition.themes.font(settings.font)
       this.rendition.spread(settings.spread || 'auto')
     },
-    prev() {
-      if (!this.rendition?.manager) return
-      return this.rendition?.prev()
-    },
-    next() {
-      if (!this.rendition?.manager) return
-      return this.rendition?.next()
-    },
     goToChapter(href) {
-      if (!this.rendition?.manager) return
       return this.rendition?.display(href)
     },
-    /** @returns {object} Returns the chapter that the `position` in the book is in */
-    findChapterFromPosition(chapters, position) {
-      let foundChapter
-      for (let i = 0; i < chapters.length; i++) {
-        if (position >= chapters[i].start && (!chapters[i + 1] || position < chapters[i + 1].start)) {
-          foundChapter = chapters[i]
-          if (chapters[i].subitems && chapters[i].subitems.length > 0) {
-            return this.findChapterFromPosition(chapters[i].subitems, position, foundChapter)
-          }
-          break
-        }
+    prev() {
+      if (this.rendition) {
+        this.rendition.prev()
       }
-      return foundChapter
     },
-    /** @returns {Array} Returns an array of chapters that only includes chapters with query results */
-    async searchBook(query) {
-      const chapters = structuredClone(await this.chapters)
-      const searchResults = await Promise.all(this.book.spine.spineItems.map((item) => item.load(this.book.load.bind(this.book)).then(item.find.bind(item, query)).finally(item.unload.bind(item))))
-      const mergedResults = [].concat(...searchResults)
-
-      mergedResults.forEach((chapter) => {
-        chapter.start = this.book.locations.percentageFromCfi(chapter.cfi)
-        const foundChapter = this.findChapterFromPosition(chapters, chapter.start)
-        if (foundChapter) foundChapter.searchResults.push(chapter)
-      })
-
-      let filteredResults = chapters.filter(function f(o) {
-        if (o.searchResults.length) return true
-        if (o.subitems.length) {
-          return (o.subitems = o.subitems.filter(f)).length
-        }
-      })
-      return filteredResults
-    },
-    keyUp(e) {
-      const rtl = this.book.package.metadata.direction === 'rtl'
-      if ((e.keyCode || e.which) == 37) {
-        return rtl ? this.next() : this.prev()
-      } else if ((e.keyCode || e.which) == 39) {
-        return rtl ? this.prev() : this.next()
+    next() {
+      if (this.rendition) {
+        this.rendition.next()
       }
     },
     /**
@@ -197,11 +153,27 @@ export default {
      * @param {string} payload.ebookLocation - CFI of the current location
      * @param {string} payload.ebookProgress - eBook Progress Percentage
      */
-    updateProgress(payload) {
+    async updateProgress(payload) {
       if (!this.keepProgress) return
-      this.$axios.$patch(`/api/me/progress/${this.libraryItemId}`, payload, { progress: false }).catch((error) => {
-        console.error('EpubReader.updateProgress failed:', error)
-      })
+
+      // Update local item
+      if (this.localLibraryItemId) {
+        const localPayload = {
+          localLibraryItemId: this.localLibraryItemId,
+          ...payload
+        }
+        const localResponse = await this.$db.updateLocalEbookProgress(localPayload)
+        if (localResponse.localMediaProgress) {
+          this.$store.commit('globals/updateLocalMediaProgress', localResponse.localMediaProgress)
+        }
+      }
+
+      // Update server item
+      if (this.serverLibraryItemId) {
+        this.$nativeHttp.patch(`/api/me/progress/${this.serverLibraryItemId}`, payload).catch((error) => {
+          console.error('EpubReader.updateProgress failed:', error)
+        })
+      }
     },
     getAllEbookLocationData() {
       const locations = []
@@ -290,15 +262,27 @@ export default {
     },
     /** @param {string} location - CFI of the new location */
     relocated(location) {
-      if (this.savedEbookLocation === location.start.cfi) {
+      console.log(`[EpubReader] relocated ${location.start.cfi}`)
+      if (this.inittingDisplay) {
+        console.log(`[EpubReader] relocated but initting display ${location.start.cfi}`)
         return
       }
+      this.currentLocationNum = location.start.location
+
+      if (this.currentLocationCfi === location.start.cfi) {
+        console.log(`[EpubReader] location already saved`, location.start.cfi)
+        return
+      }
+
+      console.log(`[EpubReader] Saving new location ${location.start.cfi}`)
+      this.currentLocationCfi = location.start.cfi
 
       if (location.end.percentage) {
         this.updateProgress({
           ebookLocation: location.start.cfi,
           ebookProgress: location.end.percentage
         })
+        this.progress = Math.round(location.end.percentage * 100)
       } else {
         this.updateProgress({
           ebookLocation: location.start.cfi
@@ -306,13 +290,15 @@ export default {
       }
     },
     initEpub() {
+      this.progress = Math.round((this.userItemProgress?.ebookProgress || 0) * 100)
+
       /** @type {EpubReader} */
       const reader = this
-
+      console.log('[EpubReader] initEpub', reader.url)
       /** @type {ePub.Book} */
-      reader.book = new ePub(reader.ebookUrl, {
-        width: this.readerWidth,
-        height: this.readerHeight - 50,
+      reader.book = new ePub(reader.url, {
+        width: window.innerWidth,
+        height: window.innerHeight - this.readerHeightOffset,
         openAs: 'epub',
         requestHeaders: {
           Authorization: `Bearer ${this.userToken}`
@@ -321,26 +307,43 @@ export default {
 
       /** @type {ePub.Rendition} */
       reader.rendition = reader.book.renderTo('viewer', {
-        width: this.readerWidth,
-        height: this.readerHeight * 0.8,
-        allowScriptedContent: this.allowScriptedContent,
-        spread: 'auto',
+        width: window.innerWidth,
+        height: window.innerHeight - this.readerHeightOffset,
         snap: true,
         manager: 'continuous',
         flow: 'paginated'
       })
 
-      // load saved progress
-      reader.rendition.display(this.savedEbookLocation || reader.book.locations.start)
-
-      reader.rendition.on('rendered', () => {
-        this.applyTheme()
-      })
-
       reader.book.ready.then(() => {
+        console.log('%c [EpubReader] Book ready', 'color:cyan;')
+
+        let displayCfi = reader.book.locations.start
+        if (this.savedEbookLocation && reader.book.spine.get(this.savedEbookLocation)) {
+          displayCfi = this.savedEbookLocation
+        }
+
+        reader.rendition.on('displayed', async () => {
+          console.log('%c [EpubReader] Rendition displayed', 'color:blue;')
+
+          // Overriding the needsSnap function in epubjs `snap.js` to fix a bug with scrollLeft being a decimal
+          reader.rendition.manager.snapper.needsSnap = function () {
+            let left = Math.round(this.scrollLeft)
+            let snapWidth = this.layout.pageWidth * this.layout.divisor
+            return left % snapWidth !== 0
+          }
+        })
+
+        reader.rendition.on('rendered', (section, view) => {
+          this.applyTheme()
+          console.log('%c [EpubReader] Rendition rendered', 'color:red;', section, view)
+        })
+
         // set up event listeners
         reader.rendition.on('relocated', reader.relocated)
-        reader.rendition.on('keydown', reader.keyUp)
+
+        reader.rendition.on('displayError', (err) => {
+          console.log('[EpubReader] Display error', err)
+        })
 
         reader.rendition.on('touchstart', (event) => {
           this.$emit('touchstart', event)
@@ -353,103 +356,90 @@ export default {
         const savedLocations = this.loadLocations()
         if (savedLocations) {
           reader.book.locations.load(savedLocations)
+          this.totalLocations = reader.book.locations.length()
         } else {
-          reader.book.locations.generate().then(() => {
+          reader.book.locations.generate(100).then(() => {
+            this.totalLocations = reader.book.locations.length()
+            this.currentLocationNum = reader.rendition.currentLocation()?.start.location || 0
             this.checkSaveLocations(reader.book.locations.save())
           })
         }
-        this.getChapters()
-      })
-    },
-    getChapters() {
-      // Load the list of chapters in the book. See https://github.com/futurepress/epub.js/issues/759
-      const toc = this.book?.navigation?.toc || []
 
-      const tocTree = []
-
-      const resolveURL = (url, relativeTo) => {
-        // see https://github.com/futurepress/epub.js/issues/1084
-        // HACK-ish: abuse the URL API a little to resolve the path
-        // the base needs to be a valid URL, or it will throw a TypeError,
-        // so we just set a random base URI and remove it later
-        const base = 'https://example.invalid/'
-        return new URL(url, base + relativeTo).href.replace(base, '')
-      }
-
-      const basePath = this.book.packaging.navPath || this.book.packaging.ncxPath
-
-      const createTree = async (toc, parent) => {
-        const promises = toc.map(async (tocItem, i) => {
-          const href = resolveURL(tocItem.href, basePath)
-          const id = href.split('#')[1]
-          const item = this.book.spine.get(href)
-          await item.load(this.book.load.bind(this.book))
-          const el = id ? item.document.getElementById(id) : item.document.body
-
-          const cfi = item.cfiFromElement(el)
-
-          parent[i] = {
-            title: tocItem.label.trim(),
-            subitems: [],
-            href,
-            cfi,
-            start: this.book.locations.percentageFromCfi(cfi),
-            end: null, // set by flattenChapters()
-            id: null, // set by flattenChapters()
-            searchResults: []
-          }
-
-          if (tocItem.subitems) {
-            await createTree(tocItem.subitems, parent[i].subitems)
-          }
+        // TODO: To get the correct page need to render twice. On book ready and after first display. Figure out why
+        console.log(`[EpubReader] Displaying cfi ${displayCfi}`)
+        this.currentLocationCfi = displayCfi
+        reader.rendition.display(displayCfi).then(() => {
+          reader.rendition.display(displayCfi).then(() => {
+            this.inittingDisplay = false
+          })
         })
-        await Promise.all(promises)
-      }
-      return createTree(toc, tocTree).then(() => {
-        this.chapters = tocTree
       })
-    },
-    flattenChapters(chapters) {
-      // Convert the nested epub chapters into something that looks like audiobook chapters for player-ui
-      const unwrap = (chapters) => {
-        return chapters.reduce((acc, chapter) => {
-          return chapter.subitems ? [...acc, chapter, ...unwrap(chapter.subitems)] : [...acc, chapter]
-        }, [])
-      }
-      let flattenedChapters = unwrap(chapters)
-
-      flattenedChapters = flattenedChapters.sort((a, b) => a.start - b.start)
-      for (let i = 0; i < flattenedChapters.length; i++) {
-        flattenedChapters[i].id = i
-        if (i < flattenedChapters.length - 1) {
-          flattenedChapters[i].end = flattenedChapters[i + 1].start
-        } else {
-          flattenedChapters[i].end = 1
-        }
-      }
-      return flattenedChapters
-    },
-    resize() {
-      this.windowWidth = window.innerWidth
-      this.windowHeight = window.innerHeight
-      this.rendition?.resize(this.readerWidth, this.readerHeight * 0.8)
     },
     applyTheme() {
       if (!this.rendition) return
       this.rendition.getContents().forEach((c) => {
         c.addStylesheetRules(this.themeRules)
       })
+    },
+    async screenOrientationChange() {
+      if (this.isRefreshingUI) return
+      this.isRefreshingUI = true
+      const windowWidth = window.innerWidth
+      this.refreshUI()
+
+      // Window width does not always change right away. Wait up to 250ms for a change.
+      // iPhone 10 on iOS 16 took between 100 - 200ms to update when going from portrait to landscape
+      //   but landscape to portrait was immediate
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        if (window.innerWidth !== windowWidth) {
+          this.refreshUI()
+          break
+        }
+      }
+
+      this.isRefreshingUI = false
+    },
+    refreshUI() {
+      if (this.rendition?.resize) {
+        this.rendition.resize(window.innerWidth, window.innerHeight - this.readerHeightOffset)
+      }
     }
   },
   mounted() {
-    this.windowWidth = window.innerWidth
-    this.windowHeight = window.innerHeight
-    window.addEventListener('resize', this.resize)
     this.initEpub()
+
+    if (screen.orientation) {
+      // Not available on ios
+      screen.orientation.addEventListener('change', this.screenOrientationChange)
+    } else {
+      document.addEventListener('orientationchange', this.screenOrientationChange)
+    }
+    window.addEventListener('resize', this.screenOrientationChange)
   },
   beforeDestroy() {
-    window.removeEventListener('resize', this.resize)
     this.book?.destroy()
-  }
+
+    if (screen.orientation) {
+      // Not available on ios
+      screen.orientation.removeEventListener('change', this.screenOrientationChange)
+    } else {
+      document.removeEventListener('orientationchange', this.screenOrientationChange)
+    }
+    window.removeEventListener('resize', this.screenOrientationChange)
+  },
 }
 </script>
+
+<style>
+#epub-frame {
+  height: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  overflow: hidden;
+}
+.reader-player-open #epub-frame {
+  height: calc(100% - 132px);
+  max-height: calc(100% - 132px);
+  overflow: hidden;
+}
+</style>

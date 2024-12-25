@@ -8,6 +8,8 @@
 </template>
 
 <script>
+import { FileSharer } from '@byteowls/capacitor-filesharer'
+
 export default {
   props: {
     processing: Boolean,
@@ -64,7 +66,7 @@ export default {
 
       const addIcon = (icon, color, fontSize, x, y) => {
         ctx.fillStyle = color
-        ctx.font = `${fontSize} Material Symbols Rounded`
+        ctx.font = `${fontSize} Material Icons Outlined`
         ctx.fillText(icon, x, y)
       }
 
@@ -113,8 +115,6 @@ export default {
         ctx.restore()
       }
 
-      const twoColumnWidth = 180
-
       ctx.globalAlpha = 1
       ctx.textBaseline = 'middle'
 
@@ -133,12 +133,12 @@ export default {
 
       // Top text
       addText('audiobookshelf', '28px', 'normal', tanColor, '0px', 65, 28)
-      addText(`${this.year} ${this.$strings.StatsYearInReview}`, '18px', 'bold', 'white', '1px', 65, 51)
+      addText(`${this.year} YEAR IN REVIEW`, '18px', 'bold', 'white', '1px', 65, 51)
 
       // Top left box
       createRoundedRect(15, 75, 280, 110)
       addText(this.yearStats.numBooksFinished, '48px', 'bold', 'white', '0px', 105, 120)
-      addText(this.$strings.StatsBooksFinished, '20px', 'normal', tanColor, '0px', 105, 155, twoColumnWidth)
+      addText('books finished', '20px', 'normal', tanColor, '0px', 105, 155)
       const readIconPath = new Path2D()
       readIconPath.addPath(new Path2D('M19 1H5c-1.1 0-1.99.9-1.99 2L3 15.93c0 .69.35 1.3.88 1.66L12 23l8.11-5.41c.53-.36.88-.97.88-1.66L21 3c0-1.1-.9-2-2-2zm-9 15l-5-5 1.41-1.41L10 13.17l7.59-7.59L19 7l-9 9z'), { a: 1.5, d: 1.5, e: 55, f: 115 })
       ctx.fillStyle = '#ffffff'
@@ -146,47 +146,43 @@ export default {
 
       createRoundedRect(305, 75, 280, 110)
       addText(this.yearStats.numBooksListened, '48px', 'bold', 'white', '0px', 400, 120)
-      addText(this.$strings.StatsBooksListenedTo, '20px', 'normal', tanColor, '0px', 400, 155, twoColumnWidth)
+      addText('books listened to', '20px', 'normal', tanColor, '0px', 400, 155)
       addIcon('local_library', 'white', '42px', 345, 130)
 
       this.canvas = canvas
       this.dataUrl = canvas.toDataURL('png')
     },
     share() {
-      this.canvas.toBlob((blob) => {
-        const file = new File([blob], 'yearinreviewshort.png', { type: blob.type })
-        const shareData = {
-          files: [file]
-        }
-        if (navigator.canShare(shareData)) {
-          navigator
-            .share(shareData)
-            .then(() => {
-              console.log('Share success')
-            })
-            .catch((error) => {
-              console.error('Failed to share', error)
-              if (error.name !== 'AbortError') {
-                this.$toast.error(this.$strings.ToastFailedToShare + ': ' + error.message)
-              }
-            })
-        } else {
-          this.$toast.error(this.$strings.ToastErrorCannotShare)
+      const base64Data = this.dataUrl.split(';base64,').pop()
+      FileSharer.share({
+        filename: `audiobookshelf_my_${this.year}_short.png`,
+        contentType: 'image/png',
+        base64Data
+      }).catch((error) => {
+        if (error.message !== 'USER_CANCELLED') {
+          console.error('Failed to share', error.message)
+          this.$toast.error('Failed to share: ' + error.message)
         }
       })
     },
     refresh() {
       this.init()
     },
-    async init() {
+    init() {
       this.$emit('update:processing', true)
-      this.yearStats = await this.$axios.$get(`/api/me/stats/year/${this.year}`).catch((err) => {
-        console.error('Failed to load stats for year', err)
-        this.$toast.error(this.$strings.ToastFailedToLoadData)
-        return null
-      })
-      await this.initCanvas()
-      this.$emit('update:processing', false)
+      this.$nativeHttp
+        .get(`/api/me/stats/year/${this.year}`)
+        .then((data) => {
+          this.yearStats = data || []
+          return this.initCanvas()
+        })
+        .catch((error) => {
+          console.error('Failed', error)
+          this.$toast.error('Failed to load year stats')
+        })
+        .finally(() => {
+          this.$emit('update:processing', false)
+        })
     }
   },
   mounted() {

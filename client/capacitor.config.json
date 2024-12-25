@@ -1,0 +1,14 @@
+{
+  "appId": "com.epilogue.app",
+  "appName": "Epilogue",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": false
+    }
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,25 +1,16 @@
 <template>
-  <div class="page" :class="streamLibraryItem ? 'streaming' : ''"></div>
+  <div class="w-full h-full"></div>
 </template>
 
 <script>
 export default {
-  asyncData({ redirect, store }) {
-    if (!store.state.libraries.currentLibraryId) {
-      return redirect('/oops?message=No libraries')
-    }
-    redirect(`/library/${store.state.libraries.currentLibraryId}`)
+  asyncData({ redirect }) {
+    return redirect('/bookshelf')
   },
   data() {
     return {}
   },
-  computed: {
-    streamLibraryItem() {
-      return this.$store.state.streamLibraryItem
-    }
-  },
-  methods: {},
-  mounted() {},
-  beforeDestroy() {}
+  computed: {},
+  methods: {}
 }
 </script>

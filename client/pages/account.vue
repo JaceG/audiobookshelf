@@ -1,247 +1,67 @@
 <template>
-  <div id="page-wrapper" class="page p-6 overflow-y-auto relative" :class="streamLibraryItem ? 'streaming' : ''">
-    <div class="w-full max-w-xl mx-auto">
-      <h1 class="text-2xl">{{ $strings.HeaderAccount }}</h1>
+  <div class="w-full h-full p-4">
+    <ui-text-input-with-label :value="serverAddress" :label="$strings.LabelHost" disabled class="my-2" />
 
-      <div class="my-4">
-        <div class="flex -mx-2">
-          <div class="w-2/3 px-2">
-            <ui-text-input-with-label disabled :value="username" :label="$strings.LabelUsername" />
-          </div>
-          <div class="w-1/3 px-2">
-            <ui-text-input-with-label disabled :value="usertype" :label="$strings.LabelAccountType" />
-          </div>
-        </div>
-        <div class="py-4">
-          <p class="px-1 text-sm font-semibold">{{ $strings.LabelLanguage }}</p>
-          <ui-dropdown v-model="selectedLanguage" :items="$languageCodeOptions" small class="max-w-48" @input="updateLocalLanguage" />
-        </div>
+    <ui-text-input-with-label :value="username" :label="$strings.LabelUsername" disabled class="my-2" />
 
-        <div class="w-full h-px bg-white/10 my-4" />
+    <ui-btn color="primary flex items-center justify-between gap-2 ml-auto text-base mt-8" @click="logout">{{ $strings.ButtonSwitchServerUser }}<span class="material-icons" style="font-size: 1.1rem">logout</span></ui-btn>
 
-        <p v-if="showChangePasswordForm" class="mb-4 text-lg">{{ $strings.HeaderChangePassword }}</p>
-        <form v-if="showChangePasswordForm" @submit.prevent="submitChangePassword">
-          <ui-text-input-with-label v-model="password" :disabled="changingPassword" type="password" :label="$strings.LabelPassword" class="my-2" />
-          <ui-text-input-with-label v-model="newPassword" :disabled="changingPassword" type="password" :label="$strings.LabelNewPassword" class="my-2" />
-          <ui-text-input-with-label v-model="confirmPassword" :disabled="changingPassword" type="password" :label="$strings.LabelConfirmPassword" class="my-2" />
-          <div class="flex items-center py-2">
-            <p v-if="isRoot" class="text-error py-2 text-xs">* {{ $strings.NoteChangeRootPassword }}</p>
-            <div class="flex-grow" />
-            <ui-btn v-show="(password && newPassword && confirmPassword) || isRoot" type="submit" :loading="changingPassword" color="success">{{ $strings.ButtonSubmit }}</ui-btn>
-          </div>
-        </form>
-      </div>
-
-      <div v-if="showEreaderTable">
-        <div class="w-full h-px bg-white/10 my-4" />
-
-        <app-settings-content :header-text="$strings.HeaderEreaderDevices">
-          <template #header-items>
-            <div class="flex-grow" />
-
-            <ui-btn color="primary" small @click="addNewDeviceClick">{{ $strings.ButtonAddDevice }}</ui-btn>
-          </template>
-
-          <table v-if="ereaderDevices.length" class="tracksTable mt-4">
-            <tr>
-              <th class="text-left">{{ $strings.LabelName }}</th>
-              <th class="text-left">{{ $strings.LabelEmail }}</th>
-              <th class="w-40"></th>
-            </tr>
-            <tr v-for="device in ereaderDevices" :key="device.name">
-              <td>
-                <p class="text-sm md:text-base text-gray-100">{{ device.name }}</p>
-              </td>
-              <td class="text-left">
-                <p class="text-sm md:text-base text-gray-100">{{ device.email }}</p>
-              </td>
-              <td class="w-40">
-                <div class="flex justify-end items-center h-10">
-                  <ui-icon-btn icon="edit" borderless :size="8" icon-font-size="1.1rem" :disabled="deletingDeviceName === device.name || device.users?.length !== 1" class="mx-1" @click="editDeviceClick(device)" />
-                  <ui-icon-btn icon="delete" borderless :size="8" icon-font-size="1.1rem" :disabled="deletingDeviceName === device.name || device.users?.length !== 1" @click="deleteDeviceClick(device)" />
-                </div>
-              </td>
-            </tr>
-          </table>
-          <div v-else-if="!loading" class="text-center py-4">
-            <p class="text-lg text-gray-100">{{ $strings.MessageNoDevices }}</p>
-          </div>
-        </app-settings-content>
-      </div>
-
-      <div class="py-4 mt-8 flex">
-        <ui-btn color="primary flex items-center text-lg" @click="logout"><span class="material-symbols mr-4 icon-text">logout</span>{{ $strings.ButtonLogout }}</ui-btn>
-      </div>
-
-      <modals-emails-user-e-reader-device-modal v-model="showEReaderDeviceModal" :existing-devices="revisedEreaderDevices" :ereader-device="selectedEReaderDevice" @update="ereaderDevicesUpdated" />
+    <div class="flex justify-center items-center my-4 left-0 right-0 bottom-0 absolute">
+      <p class="text-sm text-fg">{{ $strings.MessageReportBugsAndContribute }} <a class="underline" href="https://github.com/advplyr/audiobookshelf-app" target="_blank">GitHub</a></p>
+      <a href="https://github.com/advplyr/audiobookshelf-app" target="_blank" class="text-fg hover:scale-150 hover:rotate-6 transform duration-500 ml-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" width="24" height="24" viewBox="0 0 24 24">
+          <path
+            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+          />
+        </svg>
+      </a>
     </div>
   </div>
 </template>
 
 <script>
 export default {
-  data() {
-    return {
-      loading: false,
-      password: null,
-      newPassword: null,
-      confirmPassword: null,
-      changingPassword: false,
-      selectedLanguage: '',
-      newEReaderDevice: {
-        name: '',
-        email: ''
-      },
-      ereaderDevices: [],
-      deletingDeviceName: null,
-      selectedEReaderDevice: null,
-      showEReaderDeviceModal: false
+  asyncData({ redirect, store }) {
+    if (!store.state.socketConnected) {
+      return redirect('/connect')
     }
+    return {}
+  },
+  data() {
+    return {}
   },
   computed: {
-    streamLibraryItem() {
-      return this.$store.state.streamLibraryItem
-    },
-    user() {
-      return this.$store.state.user.user || null
-    },
     username() {
+      if (!this.user) return ''
       return this.user.username
     },
-    usertype() {
-      return this.user.type
+    user() {
+      return this.$store.state.user.user
     },
-    isRoot() {
-      return this.usertype === 'root'
+    serverConnectionConfig() {
+      return this.$store.state.user.serverConnectionConfig || {}
     },
-    isGuest() {
-      return this.usertype === 'guest'
-    },
-    isPasswordAuthEnabled() {
-      const activeAuthMethods = this.$store.getters['getServerSetting']('authActiveAuthMethods') || []
-      return activeAuthMethods.includes('local')
-    },
-    showChangePasswordForm() {
-      return !this.isGuest && this.isPasswordAuthEnabled
-    },
-    showEreaderTable() {
-      return this.usertype !== 'root' && this.usertype !== 'admin' && this.user.permissions?.createEreader
-    },
-    revisedEreaderDevices() {
-      return this.ereaderDevices.filter((device) => device.users?.length === 1)
+    serverAddress() {
+      return this.serverConnectionConfig.address
     }
   },
   methods: {
-    updateLocalLanguage(lang) {
-      this.$setLanguageCode(lang)
-    },
-    logout() {
-      // Disconnect from socket
-      if (this.$root.socket) {
-        console.log('Disconnecting from socket', this.$root.socket.id)
-        this.$root.socket.removeAllListeners()
-        this.$root.socket.disconnect()
-      }
-
-      if (localStorage.getItem('token')) {
-        localStorage.removeItem('token')
-      }
-      this.$store.commit('libraries/setUserPlaylists', [])
-      this.$store.commit('libraries/setCollections', [])
-
-      this.$axios
-        .$post('/logout')
-        .then((logoutPayload) => {
-          const redirect_url = logoutPayload.redirect_url
-
-          if (redirect_url) {
-            window.location.href = redirect_url
-          } else {
-            this.$router.push('/login')
-          }
-        })
-        .catch((error) => {
+    async logout() {
+      await this.$hapticsImpact()
+      if (this.user) {
+        await this.$nativeHttp.post('/logout').catch((error) => {
           console.error(error)
         })
-    },
-    resetForm() {
-      this.password = null
-      this.newPassword = null
-      this.confirmPassword = null
-    },
-    submitChangePassword() {
-      if (this.newPassword !== this.confirmPassword) {
-        return this.$toast.error(this.$strings.ToastUserPasswordMismatch)
       }
-      if (this.password === this.newPassword) {
-        return this.$toast.error(this.$strings.ToastUserPasswordMustChange)
-      }
-      this.changingPassword = true
-      this.$axios
-        .$patch('/api/me/password', {
-          password: this.password,
-          newPassword: this.newPassword
-        })
-        .then((res) => {
-          if (res.success) {
-            this.$toast.success(this.$strings.ToastUserPasswordChangeSuccess)
-            this.resetForm()
-          } else {
-            this.$toast.error(res.error || this.$strings.ToastUnknownError)
-          }
-          this.changingPassword = false
-        })
-        .catch((error) => {
-          console.error(error)
-          this.$toast.error(this.$strings.ToastUnknownError)
-          this.changingPassword = false
-        })
-    },
-    addNewDeviceClick() {
-      this.selectedEReaderDevice = null
-      this.showEReaderDeviceModal = true
-    },
-    editDeviceClick(device) {
-      this.selectedEReaderDevice = device
-      this.showEReaderDeviceModal = true
-    },
-    deleteDeviceClick(device) {
-      const payload = {
-        message: this.$getString('MessageConfirmDeleteDevice', [device.name]),
-        callback: (confirmed) => {
-          if (confirmed) {
-            this.deleteDevice(device)
-          }
-        },
-        type: 'yesNo'
-      }
-      this.$store.commit('globals/setConfirmPrompt', payload)
-    },
-    deleteDevice(device) {
-      const payload = {
-        ereaderDevices: this.revisedEreaderDevices.filter((d) => d.name !== device.name)
-      }
-      this.deletingDeviceName = device.name
-      this.$axios
-        .$post(`/api/me/ereader-devices`, payload)
-        .then((data) => {
-          this.ereaderDevicesUpdated(data.ereaderDevices)
-        })
-        .catch((error) => {
-          console.error('Failed to delete device', error)
-          this.$toast.error(this.$strings.ToastRemoveFailed)
-        })
-        .finally(() => {
-          this.deletingDeviceName = null
-        })
-    },
-    ereaderDevicesUpdated(ereaderDevices) {
-      this.ereaderDevices = ereaderDevices
+
+      this.$socket.logout()
+      await this.$db.logout()
+      this.$localStore.removeLastLibraryId()
+      this.$store.commit('user/logout')
+      this.$store.commit('libraries/setCurrentLibrary', null)
+      this.$router.push('/connect')
     }
   },
-  mounted() {
-    this.selectedLanguage = this.$languageCodes.current
-    this.ereaderDevices = this.$store.state.libraries.ereaderDevices || []
-  }
+  mounted() {}
 }
 </script>

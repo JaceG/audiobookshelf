@@ -1,9 +1,7 @@
 <template>
-  <div class="w-full h-full">
-    <div class="h-full max-h-full w-full">
-      <div class="ebook-viewer absolute overflow-y-scroll left-0 right-0 top-16 w-full max-w-4xl m-auto z-10 border border-black border-opacity-20 shadow-md bg-white">
-        <iframe title="html-viewer" width="100%"> Loading </iframe>
-      </div>
+  <div class="mobi-ebook-viewer w-full relative">
+    <div class="absolute overflow-hidden left-0 top-0 w-screen max-w-screen m-auto z-10 border border-black border-opacity-20 shadow-md bg-white">
+      <iframe title="html-viewer" class="w-full overflow-hidden"> Loading </iframe>
     </div>
   </div>
 </template>
@@ -15,12 +13,11 @@ import defaultCss from '@/assets/ebooks/basic.js'
 
 export default {
   props: {
+    url: String,
     libraryItem: {
       type: Object,
       default: () => {}
-    },
-    playerOpen: Boolean,
-    fileId: String
+    }
   },
   data() {
     return {}
@@ -28,15 +25,6 @@ export default {
   computed: {
     userToken() {
       return this.$store.getters['user/getToken']
-    },
-    libraryItemId() {
-      return this.libraryItem?.id
-    },
-    ebookUrl() {
-      if (this.fileId) {
-        return `/api/items/${this.libraryItemId}/ebook/${this.fileId}`
-      }
-      return `/api/items/${this.libraryItemId}/ebook`
     }
   },
   methods: {
@@ -96,7 +84,7 @@ export default {
     },
     async initMobi() {
       // Fetch mobi file as blob
-      var buff = await this.$axios.$get(this.ebookUrl, {
+      var buff = await this.$axios.$get(this.url, {
         responseType: 'blob',
         headers: {
           Authorization: `Bearer ${this.userToken}`
@@ -133,7 +121,16 @@ export default {
 </script>
 
 <style>
-.ebook-viewer {
-  height: calc(100% - 96px);
+.mobi-ebook-viewer {
+  height: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.reader-player-open .mobi-ebook-viewer {
+  height: calc(100% - 132px);
+  max-height: calc(100% - 132px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 </style>

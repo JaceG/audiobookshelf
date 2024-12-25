@@ -17,6 +17,7 @@ export default {
     },
     width: Number,
     height: Number,
+    groupTo: String,
     bookCoverAspectRatio: Number
   },
   data() {
@@ -40,14 +41,6 @@ export default {
       handler(newVal) {
         if (newVal) {
           // ensure wrapper is initialized
-          this.$nextTick(this.init)
-        }
-      }
-    },
-    width: {
-      handler(newVal) {
-        if (newVal) {
-          this.isInit = false
           this.$nextTick(this.init)
         }
       }
@@ -121,8 +114,6 @@ export default {
 
       var img = document.createElement('img')
       img.src = src
-      img.alt = `${this.name}, ${this.$strings.LabelCover}`
-      img.ariaHidden = true
       img.className = 'absolute top-0 left-0 w-full h-full'
       img.style.objectFit = showCoverBg ? 'contain' : 'cover'
 
@@ -140,7 +131,7 @@ export default {
 
       var innerP = document.createElement('p')
       innerP.textContent = this.name
-      innerP.className = 'text-sm text-white'
+      innerP.className = 'text-smtext-white'
       imgdiv.appendChild(innerP)
 
       return imgdiv

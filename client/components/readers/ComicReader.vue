@@ -1,57 +1,34 @@
 <template>
-  <div class="w-full h-full">
-    <div v-show="showPageMenu" v-click-outside="clickOutside" class="pagemenu absolute top-9 left-8 rounded-md overflow-y-auto bg-bg shadow-lg z-20 border border-gray-400" :style="{ width: pageMenuWidth + 'px' }">
-      <div v-for="(file, index) in cleanedPageNames" :key="file" class="w-full cursor-pointer hover:bg-black-200 px-2 py-1" :class="page === index + 1 ? 'bg-black-200' : ''" @click="setPage(index + 1)">
-        <p class="text-sm truncate">{{ file }}</p>
-      </div>
-    </div>
-    <div v-show="showInfoMenu" v-click-outside="clickOutside" class="pagemenu absolute top-9 left-20 rounded-md overflow-y-auto bg-bg shadow-lg z-20 border border-gray-400 w-96">
-      <div v-for="key in comicMetadataKeys" :key="key" class="w-full px-2 py-1">
-        <p class="text-xs">
-          <strong>{{ key }}</strong
-          >: {{ comicMetadata[key] }}
-        </p>
-      </div>
-    </div>
-
-    <div v-if="numPages" class="absolute top-0 left-4 sm:left-8 bg-bg text-gray-100 border-b border-l border-r border-gray-400 hover:bg-black-200 cursor-pointer rounded-b-md w-10 h-9 flex items-center justify-center text-center z-20" @mousedown.prevent @click.stop.prevent="clickShowPageMenu">
-      <span class="material-symbols text-xl">menu</span>
-    </div>
-    <div v-if="comicMetadata" class="absolute top-0 left-16 sm:left-20 bg-bg text-gray-100 border-b border-l border-r border-gray-400 hover:bg-black-200 cursor-pointer rounded-b-md w-10 h-9 flex items-center justify-center text-center z-20" @mousedown.prevent @click.stop.prevent="clickShowInfoMenu">
-      <span class="material-symbols text-xl">more</span>
-    </div>
-    <a v-if="pages && numPages" :href="mainImg" :download="pages[page - 1]" class="absolute top-0 bg-bg text-gray-100 border-b border-l border-r border-gray-400 hover:bg-black-200 cursor-pointer rounded-b-md w-10 h-9 flex items-center justify-center text-center z-20" :class="comicMetadata ? 'left-28 sm:left-32' : 'left-16 sm:left-20'">
-      <span class="material-symbols text-xl">download</span>
-    </a>
-
-    <div v-if="numPages" class="absolute top-0 right-14 sm:right-16 bg-bg text-gray-100 border-b border-l border-r border-gray-400 rounded-b-md px-2 h-9 flex items-center text-center z-20">
-      <p class="font-mono">{{ page }} / {{ numPages }}</p>
-    </div>
-    <div v-if="mainImg" class="absolute top-0 right-36 sm:right-40 bg-bg text-gray-100 border-b border-l border-r border-gray-400 rounded-b-md px-2 h-9 flex items-center text-center z-20">
-      <ui-icon-btn icon="zoom_out" :size="8" :disabled="!canScaleDown" borderless class="mr-px" @click="zoomOut" />
-      <ui-icon-btn icon="zoom_in" :size="8" :disabled="!canScaleUp" borderless class="ml-px" @click="zoomIn" />
-    </div>
-
-    <div class="w-full h-full relative">
-      <div v-show="canGoPrev" ref="prevButton" class="absolute top-0 left-0 h-full w-1/2 lg:w-1/3 hover:opacity-100 opacity-0 z-10 cursor-pointer" @click.stop.prevent="prev" @mousedown.prevent>
-        <div class="flex items-center justify-center h-full w-1/2">
-          <span v-show="loadedFirstPage" class="material-symbols text-5xl text-white cursor-pointer text-opacity-30 hover:text-opacity-90">arrow_back_ios</span>
+  <div id="comic-reader" class="w-full h-full relative">
+    <modals-modal v-model="showInfoMenu" height="90%">
+      <div class="w-full h-full overflow-hidden absolute top-0 left-0 flex items-center justify-center" @click.stop="showInfoMenu = false">
+        <div class="w-full overflow-x-hidden overflow-y-auto bg-bg rounded-lg border border-border text-fg" style="max-height: 75%" @click.stop>
+          <div v-for="key in comicMetadataKeys" :key="key" class="w-full px-2 py-1">
+            <p class="text-xs">
+              <strong>{{ key }}</strong>
+              : {{ comicMetadata[key] }}
+            </p>
+          </div>
         </div>
       </div>
-      <div v-show="canGoNext" ref="nextButton" class="absolute top-0 right-0 h-full w-1/2 lg:w-1/3 hover:opacity-100 opacity-0 z-10 cursor-pointer" @click.stop.prevent="next" @mousedown.prevent>
-        <div class="flex items-center justify-center h-full w-1/2 ml-auto">
-          <span v-show="loadedFirstPage" class="material-symbols text-5xl text-white cursor-pointer text-opacity-30 hover:text-opacity-90">arrow_forward_ios</span>
-        </div>
+    </modals-modal>
+
+    <div class="overflow-hidden m-auto comicwrapper relative">
+      <div class="h-full flex justify-center">
+        <img v-if="mainImg" :src="mainImg" class="object-contain comicimg" />
       </div>
-      <div ref="imageContainer" class="w-full h-full relative overflow-auto">
-        <div class="h-full flex" :class="scale > 100 ? '' : 'justify-center'">
-          <img v-if="mainImg" :style="{ minWidth: scale + '%', width: scale + '%' }" :src="mainImg" class="object-contain m-auto" />
-        </div>
-      </div>
+
       <div v-show="loading" class="w-full h-full absolute top-0 left-0 flex items-center justify-center z-10">
         <ui-loading-indicator />
       </div>
     </div>
+
+    <div class="fixed left-0 h-8 w-full bg-bg px-4 flex items-center text-fg-muted" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+      <div class="flex-grow" />
+      <p class="text-xs">{{ page }} / {{ numPages }}</p>
+    </div>
+
+    <modals-dialog v-model="showPageMenu" :items="pageItems" :selected="page" :width="360" item-padding-y="8px" @action="setPage" />
   </div>
 </template>
 
@@ -60,23 +37,19 @@ import Path from 'path'
 import { Archive } from 'libarchive.js/main.js'
 import { CompressedFile } from 'libarchive.js/src/compressed-file'
 
-// This is % with respect to the screen width
-const MAX_SCALE = 400
-const MIN_SCALE = 10
-
 Archive.init({
   workerUrl: '/libarchive/worker-bundle.js'
 })
 
 export default {
   props: {
+    url: String,
     libraryItem: {
       type: Object,
       default: () => {}
     },
-    playerOpen: Boolean,
-    keepProgress: Boolean,
-    fileId: String
+    isLocal: Boolean,
+    keepProgress: Boolean
   },
   data() {
     return {
@@ -86,13 +59,12 @@ export default {
       mainImg: null,
       page: 0,
       numPages: 0,
-      pageMenuWidth: 256,
       showPageMenu: false,
       showInfoMenu: false,
       loadTimeout: null,
       loadedFirstPage: false,
       comicMetadata: null,
-      scale: 80
+      pageMenuWidth: 256
     }
   },
   watch: {
@@ -110,11 +82,21 @@ export default {
     libraryItemId() {
       return this.libraryItem?.id
     },
-    ebookUrl() {
-      if (this.fileId) {
-        return `/api/items/${this.libraryItemId}/ebook/${this.fileId}`
+    localLibraryItem() {
+      if (this.isLocal) return this.libraryItem
+      return this.libraryItem.localLibraryItem || null
+    },
+    localLibraryItemId() {
+      return this.localLibraryItem?.id
+    },
+    serverLibraryItemId() {
+      if (!this.isLocal) return this.libraryItem.id
+      // Check if local library item is connected to the current server
+      if (!this.libraryItem.serverAddress || !this.libraryItem.libraryItemId) return null
+      if (this.$store.getters['user/getServerAddress'] === this.libraryItem.serverAddress) {
+        return this.libraryItem.libraryItemId
       }
-      return `/api/items/${this.libraryItemId}/ebook`
+      return null
     },
     comicMetadataKeys() {
       return this.comicMetadata ? Object.keys(this.comicMetadata) : []
@@ -125,46 +107,53 @@ export default {
     canGoPrev() {
       return this.page > 1
     },
-    userMediaProgress() {
-      if (!this.libraryItemId) return
-      return this.$store.getters['user/getUserMediaProgress'](this.libraryItemId)
+    userItemProgress() {
+      if (this.isLocal) return this.localItemProgress
+      return this.serverItemProgress
+    },
+    localItemProgress() {
+      return this.$store.getters['globals/getLocalMediaProgressById'](this.localLibraryItemId)
+    },
+    serverItemProgress() {
+      return this.$store.getters['user/getUserMediaProgress'](this.serverLibraryItemId)
     },
     savedPage() {
       if (!this.keepProgress) return 0
 
       // Validate ebookLocation is a number
-      if (!this.userMediaProgress?.ebookLocation || isNaN(this.userMediaProgress.ebookLocation)) return 0
-      return Number(this.userMediaProgress.ebookLocation)
+      if (!this.userItemProgress?.ebookLocation || isNaN(this.userItemProgress.ebookLocation)) return 0
+      return Number(this.userItemProgress.ebookLocation)
+    },
+    selectedCleanedPage() {
+      return this.cleanedPageNames[this.page - 1]
     },
     cleanedPageNames() {
       return (
         this.pages?.map((p) => {
-          if (p.length > 50) {
-            let firstHalf = p.slice(0, 22)
-            let lastHalf = p.slice(p.length - 23)
+          if (p.length > 40) {
+            let firstHalf = p.slice(0, 18)
+            let lastHalf = p.slice(p.length - 17)
             return `${firstHalf} ... ${lastHalf}`
           }
           return p
         }) || []
       )
     },
-    canScaleUp() {
-      return this.scale < MAX_SCALE
+    pageItems() {
+      let index = 1
+      return this.cleanedPageNames.map((p) => {
+        return {
+          text: p,
+          value: index++
+        }
+      })
     },
-    canScaleDown() {
-      return this.scale > MIN_SCALE
+    isPlayerOpen() {
+      return this.$store.getters['getIsPlayerOpen']
     }
   },
   methods: {
-    clickShowPageMenu() {
-      this.showInfoMenu = false
-      this.showPageMenu = !this.showPageMenu
-    },
-    clickShowInfoMenu() {
-      this.showPageMenu = false
-      this.showInfoMenu = !this.showInfoMenu
-    },
-    updateProgress() {
+    async updateProgress() {
       if (!this.keepProgress) return
 
       if (!this.numPages) {
@@ -176,16 +165,37 @@ export default {
       }
 
       const payload = {
-        ebookLocation: this.page,
+        ebookLocation: String(this.page),
         ebookProgress: Math.max(0, Math.min(1, (Number(this.page) - 1) / Number(this.numPages)))
       }
-      this.$axios.$patch(`/api/me/progress/${this.libraryItemId}`, payload, { progress: false }).catch((error) => {
-        console.error('ComicReader.updateProgress failed:', error)
-      })
+
+      // Update local item
+      if (this.localLibraryItemId) {
+        const localPayload = {
+          localLibraryItemId: this.localLibraryItemId,
+          ...payload
+        }
+        const localResponse = await this.$db.updateLocalEbookProgress(localPayload)
+        if (localResponse.localMediaProgress) {
+          this.$store.commit('globals/updateLocalMediaProgress', localResponse.localMediaProgress)
+        }
+      }
+
+      // Update server item
+      if (this.serverLibraryItemId) {
+        this.$nativeHttp.patch(`/api/me/progress/${this.serverLibraryItemId}`, payload).catch((error) => {
+          console.error('ComicReader.updateProgress failed:', error)
+        })
+      }
     },
-    clickOutside() {
-      if (this.showPageMenu) this.showPageMenu = false
-      if (this.showInfoMenu) this.showInfoMenu = false
+    clickShowInfoMenu() {
+      this.showInfoMenu = !this.showInfoMenu
+      this.showPageMenu = false
+    },
+    clickShowPageMenu() {
+      if (!this.numPages) return
+      this.showPageMenu = !this.showPageMenu
+      this.showInfoMenu = false
     },
     next() {
       if (!this.canGoNext) return
@@ -200,9 +210,9 @@ export default {
         return
       }
       this.showPageMenu = false
-      this.showInfoMenu = false
       const filename = this.pages[page - 1]
       this.page = page
+
       this.updateProgress()
       return this.extractFile(filename)
     },
@@ -233,12 +243,14 @@ export default {
     },
     async extract() {
       this.loading = true
-      var buff = await this.$axios.$get(this.ebookUrl, {
+
+      const buff = await this.$axios.$get(this.url, {
         responseType: 'blob',
         headers: {
           Authorization: `Bearer ${this.userToken}`
         }
       })
+
       const archive = await Archive.open(buff)
       const originalFilesObject = await archive.getFilesObject()
       // to support images in subfolders we need to flatten the object
@@ -276,6 +288,10 @@ export default {
         const startPage = this.savedPage > 0 && this.savedPage <= this.numPages ? this.savedPage : 1
         await this.setPage(startPage)
         this.loadedFirstPage = true
+
+        this.$emit('loaded', {
+          hasMetadata: this.comicMetadata
+        })
       } else {
         this.$toast.error('Unable to extract pages')
         this.loading = false
@@ -302,7 +318,6 @@ export default {
       return flattenObject(filesObject)
     },
     async extractXmlFile(filename) {
-      console.log('extracting xml filename', filename)
       try {
         var file = await this.filesObject[filename].extract()
         var reader = new FileReader()
@@ -348,42 +363,31 @@ export default {
       orderedImages = orderedImages.concat(noNumImages.map((i) => i.filename))
 
       this.pages = orderedImages
-    },
-    zoomIn() {
-      this.scale += 10
-    },
-    zoomOut() {
-      this.scale -= 10
-    },
-    scroll(event) {
-      const imageContainer = this.$refs.imageContainer
-
-      imageContainer.scrollBy({
-        top: event.deltaY,
-        left: event.deltaX,
-        behavior: 'auto'
-      })
     }
   },
-  mounted() {
-    const prevButton = this.$refs.prevButton
-    const nextButton = this.$refs.nextButton
-
-    prevButton.addEventListener('wheel', this.scroll, { passive: false })
-    nextButton.addEventListener('wheel', this.scroll, { passive: false })
-  },
-  beforeDestroy() {
-    const prevButton = this.$refs.prevButton
-    const nextButton = this.$refs.nextButton
-
-    prevButton.removeEventListener('wheel', this.scroll, { passive: false })
-    nextButton.removeEventListener('wheel', this.scroll, { passive: false })
-  }
+  mounted() {},
+  beforeDestroy() {}
 }
 </script>
 
 <style scoped>
-.pagemenu {
-  max-height: calc(100% - 48px);
+#comic-reader {
+  height: calc(100% - 36px);
+  max-height: calc(100% - 36px);
+  padding-top: 36px;
+}
+.reader-player-open #comic-reader {
+  height: calc(100% - 156px);
+  max-height: calc(100% - 156px);
+  padding-top: 36px;
+}
+
+.comicimg {
+  height: 100%;
+  margin: auto;
+}
+.comicwrapper {
+  width: 100vw;
+  height: 100%;
 }
 </style>

@@ -1,22 +1,15 @@
+import { Browser } from '@capacitor/browser'
+
 export const state = () => ({
   user: null,
+  serverConnectionConfig: null,
   settings: {
-    orderBy: 'media.metadata.title',
-    orderDesc: false,
-    filterBy: 'all',
+    mobileOrderBy: 'addedAt',
+    mobileOrderDesc: true,
+    mobileFilterBy: 'all',
     playbackRate: 1,
-    bookshelfCoverSize: 120,
     collapseSeries: false,
-    collapseBookSeries: false,
-    showSubtitles: false,
-    useChapterTrack: false,
-    seriesSortBy: 'name',
-    seriesSortDesc: false,
-    seriesFilterBy: 'all',
-    authorSortBy: 'name',
-    authorSortDesc: false,
-    jumpForwardAmount: 10,
-    jumpBackwardAmount: 10
+    collapseBookSeries: false
   }
 })
 
@@ -26,18 +19,28 @@ export const getters = {
   getToken: (state) => {
     return state.user?.token || null
   },
-  getUserMediaProgress:
-    (state) =>
-    (libraryItemId, episodeId = null) => {
-      if (!state.user.mediaProgress) return null
-      return state.user.mediaProgress.find((li) => {
-        if (episodeId && li.episodeId !== episodeId) return false
-        return li.libraryItemId == libraryItemId
-      })
-    },
+  getServerConnectionConfigId: (state) => {
+    return state.serverConnectionConfig?.id || null
+  },
+  getServerAddress: (state) => {
+    return state.serverConnectionConfig?.address || null
+  },
+  getServerConfigName: (state) => {
+    return state.serverConnectionConfig?.name || null
+  },
+  getCustomHeaders: (state) => {
+    return state.serverConnectionConfig?.customHeaders || null
+  },
+  getUserMediaProgress: (state) => (libraryItemId, episodeId = null) => {
+    if (!state.user?.mediaProgress) return null
+    return state.user.mediaProgress.find(li => {
+      if (episodeId && li.episodeId !== episodeId) return false
+      return li.libraryItemId == libraryItemId
+    })
+  },
   getUserBookmarksForItem: (state) => (libraryItemId) => {
-    if (!state.user.bookmarks) return []
-    return state.user.bookmarks.filter((bm) => bm.libraryItemId === libraryItemId)
+    if (!state?.user?.bookmarks) return []
+    return state.user.bookmarks.filter(bm => bm.libraryItemId === libraryItemId)
   },
   getUserSetting: (state) => (key) => {
     return state.settings?.[key] || null
@@ -50,29 +53,6 @@ export const getters = {
   },
   getUserCanDownload: (state) => {
     return !!state.user?.permissions?.download
-  },
-  getUserCanUpload: (state) => {
-    return !!state.user?.permissions?.upload
-  },
-  getUserCanAccessAllLibraries: (state) => {
-    return !!state.user?.permissions?.accessAllLibraries
-  },
-  getLibrariesAccessible: (state, getters) => {
-    if (!state.user) return []
-    if (getters.getUserCanAccessAllLibraries) return []
-    return state.user.librariesAccessible || []
-  },
-  getCanAccessLibrary: (state, getters) => (libraryId) => {
-    if (!state.user) return false
-    if (getters.getUserCanAccessAllLibraries) return true
-    return getters.getLibrariesAccessible.includes(libraryId)
-  },
-  getIsSeriesRemovedFromContinueListening: (state) => (seriesId) => {
-    if (!state.user || !state.user.seriesHideFromContinueListening || !state.user.seriesHideFromContinueListening.length) return false
-    return state.user.seriesHideFromContinueListening.includes(seriesId)
-  },
-  getSizeMultiplier: (state) => {
-    return state.settings.bookshelfCoverSize / 120
   }
 }
 
@@ -81,33 +61,33 @@ export const actions = {
   checkUpdateLibrarySortFilter({ state, dispatch, commit }, mediaType) {
     const settingsUpdate = {}
     if (mediaType == 'podcast') {
-      if (state.settings.orderBy == 'media.metadata.authorName' || state.settings.orderBy == 'media.metadata.authorNameLF') {
-        settingsUpdate.orderBy = 'media.metadata.author'
+      if (state.settings.mobileOrderBy == 'media.metadata.authorName' || state.settings.mobileOrderBy == 'media.metadata.authorNameLF') {
+        settingsUpdate.mobileOrderBy = 'media.metadata.author'
       }
-      if (state.settings.orderBy == 'media.duration') {
-        settingsUpdate.orderBy = 'media.numTracks'
+      if (state.settings.mobileOrderBy == 'media.duration') {
+        settingsUpdate.mobileOrderBy = 'media.numTracks'
       }
-      if (state.settings.orderBy == 'media.metadata.publishedYear') {
-        settingsUpdate.orderBy = 'media.metadata.title'
+      if (state.settings.mobileOrderBy == 'media.metadata.publishedYear') {
+        settingsUpdate.mobileOrderBy = 'media.metadata.title'
       }
-      const invalidFilters = ['series', 'authors', 'narrators', 'publishers', 'publishedDecades', 'languages', 'progress', 'issues', 'ebooks', 'abridged']
-      const filterByFirstPart = (state.settings.filterBy || '').split('.').shift()
+      const invalidFilters = ['series', 'authors', 'narrators', 'languages', 'progress', 'issues']
+      const filterByFirstPart = (state.settings.mobileFilterBy || '').split('.').shift()
       if (invalidFilters.includes(filterByFirstPart)) {
-        settingsUpdate.filterBy = 'all'
+        settingsUpdate.mobileFilterBy = 'all'
       }
     } else {
-      if (state.settings.orderBy == 'media.metadata.author') {
-        settingsUpdate.orderBy = 'media.metadata.authorName'
+      if (state.settings.mobileOrderBy == 'media.metadata.author') {
+        settingsUpdate.mobileOrderBy = 'media.metadata.authorName'
       }
-      if (state.settings.orderBy == 'media.numTracks') {
-        settingsUpdate.orderBy = 'media.duration'
+      if (state.settings.mobileOrderBy == 'media.numTracks') {
+        settingsUpdate.mobileOrderBy = 'media.duration'
       }
     }
     if (Object.keys(settingsUpdate).length) {
       dispatch('updateUserSettings', settingsUpdate)
     }
   },
-  updateUserSettings({ state, commit }, payload) {
+  async updateUserSettings({ state, commit }, payload) {
     if (!payload) return false
 
     let hasChanges = false
@@ -120,59 +100,83 @@ export const actions = {
     }
     if (hasChanges) {
       commit('setSettings', existingSettings)
+      await this.$localStore.setUserSettings(existingSettings)
       this.$eventBus.$emit('user-settings', state.settings)
     }
   },
-  loadUserSettings({ state, commit }) {
-    // Load settings from local storage
-    try {
-      let userSettingsFromLocal = localStorage.getItem('userSettings')
-      if (userSettingsFromLocal) {
-        userSettingsFromLocal = JSON.parse(userSettingsFromLocal)
-        const userSettings = { ...state.settings }
-        for (const key in userSettings) {
-          if (userSettingsFromLocal[key] !== undefined) {
-            userSettings[key] = userSettingsFromLocal[key]
-          }
+  async loadUserSettings({ state, commit }) {
+    const userSettingsFromLocal = await this.$localStore.getUserSettings()
+
+    if (userSettingsFromLocal) {
+      const userSettings = { ...state.settings }
+      for (const key in userSettings) {
+        if (userSettingsFromLocal[key] !== undefined) {
+          userSettings[key] = userSettingsFromLocal[key]
         }
-        commit('setSettings', userSettings)
-        this.$eventBus.$emit('user-settings', state.settings)
       }
+      commit('setSettings', userSettings)
+      this.$eventBus.$emit('user-settings', state.settings)
+    }
+  },
+  async openWebClient({ getters }, path = null) {
+    const serverAddress = getters.getServerAddress
+    if (!serverAddress) {
+      console.error('openWebClient: No server address')
+      return
+    }
+    try {
+      let url = serverAddress.replace(/\/$/, '') // Remove trailing slash
+      if (path?.startsWith('/')) url += path
+
+      await Browser.open({ url })
     } catch (error) {
-      console.error('Failed to load userSettings from local storage', error)
+      console.error('Error opening browser', error)
     }
   }
 }
 
 export const mutations = {
+  logout(state) {
+    state.user = null
+    state.serverConnectionConfig = null
+  },
   setUser(state, user) {
     state.user = user
-    if (user) {
-      if (user.token) localStorage.setItem('token', user.token)
-    } else {
-      localStorage.removeItem('token')
-    }
   },
-  setUserToken(state, token) {
-    state.user.token = token
-    localStorage.setItem('token', token)
-  },
-  updateMediaProgress(state, { id, data }) {
+  removeMediaProgress(state, id) {
     if (!state.user) return
-    if (!data) {
-      state.user.mediaProgress = state.user.mediaProgress.filter((lip) => lip.id != id)
+    state.user.mediaProgress = state.user.mediaProgress.filter(mp => mp.id != id)
+  },
+  updateUserMediaProgress(state, data) {
+    if (!data || !state.user) return
+    const mediaProgressIndex = state.user.mediaProgress.findIndex(mp => mp.id === data.id)
+    if (mediaProgressIndex >= 0) {
+      state.user.mediaProgress.splice(mediaProgressIndex, 1, data)
     } else {
-      var indexOf = state.user.mediaProgress.findIndex((lip) => lip.id == id)
-      if (indexOf >= 0) {
-        state.user.mediaProgress.splice(indexOf, 1, data)
-      } else {
-        state.user.mediaProgress.push(data)
-      }
+      state.user.mediaProgress.push(data)
     }
+  },
+  setServerConnectionConfig(state, serverConnectionConfig) {
+    state.serverConnectionConfig = serverConnectionConfig
   },
   setSettings(state, settings) {
     if (!settings) return
-    localStorage.setItem('userSettings', JSON.stringify(settings))
     state.settings = settings
+  },
+  updateBookmark(state, bookmark) {
+    if (!state.user?.bookmarks) return
+    state.user.bookmarks = state.user.bookmarks.map((bm) => {
+      if (bm.libraryItemId === bookmark.libraryItemId && bm.time === bookmark.time) {
+        return bookmark
+      }
+      return bm
+    })
+  },
+  deleteBookmark(state, { libraryItemId, time }) {
+    if (!state.user?.bookmarks) return
+    state.user.bookmarks = state.user.bookmarks.filter(bm => {
+      if (bm.libraryItemId === libraryItemId && bm.time === time) return false
+      return true
+    })
   }
 }

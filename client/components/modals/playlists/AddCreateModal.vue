@@ -1,81 +1,91 @@
 <template>
-  <modals-modal v-model="show" name="playlists" :processing="processing" :width="500" :height="'unset'">
-    <template #outer>
-      <div class="absolute top-0 left-0 p-5 w-2/3 overflow-hidden pointer-events-none">
-        <p class="text-3xl text-white truncate">{{ title }}</p>
-      </div>
-    </template>
+  <modals-fullscreen-modal v-model="show" :processing="processing">
+    <div class="flex items-end justify-between h-24 px-4 pb-2">
+      <h1 class="text-lg">{{ $strings.LabelAddToPlaylist }}</h1>
+      <button class="flex" @click="show = false">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
 
-    <div ref="container" class="w-full rounded-lg bg-primary box-shadow-md overflow-y-auto overflow-x-hidden" style="max-height: 80vh">
-      <div v-if="show" class="w-full h-full">
-        <div class="py-4 px-4">
-          <h1 v-if="!isBatch" class="text-2xl">{{ $strings.LabelAddToPlaylist }}</h1>
-          <h1 v-else class="text-2xl">{{ $getString('LabelAddToPlaylistBatch', [selectedPlaylistItems.length]) }}</h1>
-        </div>
-        <div class="w-full overflow-y-auto overflow-x-hidden max-h-96">
-          <transition-group name="list-complete" tag="div">
-            <template v-for="playlist in sortedPlaylists">
-              <modals-playlists-user-playlist-item :key="playlist.id" :playlist="playlist" class="list-complete-item" @add="addToPlaylist" @remove="removeFromPlaylist" @close="show = false" />
-            </template>
-          </transition-group>
-        </div>
-        <div v-if="!playlists.length" class="flex h-32 items-center justify-center">
-          <p class="text-xl">{{ $strings.MessageNoUserPlaylists }}</p>
-        </div>
-        <div class="w-full h-px bg-white bg-opacity-10" />
-        <form @submit.prevent="submitCreatePlaylist">
-          <div class="flex px-4 py-2 items-center text-center border-b border-white border-opacity-10 text-white text-opacity-80">
-            <div class="flex-grow px-2">
-              <ui-text-input v-model="newPlaylistName" :placeholder="$strings.PlaceholderNewPlaylist" class="w-full" />
-            </div>
-            <ui-btn type="submit" color="success" :padding-x="4" class="h-10">{{ $strings.ButtonCreate }}</ui-btn>
+    <!-- create new playlist form -->
+    <div v-if="showPlaylistNameInput" class="w-full h-full max-h-[calc(100vh-176px)] flex items-center">
+      <div class="w-full px-4">
+        <div class="flex mb-4 items-center">
+          <div class="w-9 h-9 flex items-center justify-center rounded-full cursor-pointer" @click.stop="showPlaylistNameInput = false">
+            <span class="material-icons text-3xl">arrow_back</span>
           </div>
-        </form>
+          <p class="text-xl pl-2 leading-none">{{ $strings.HeaderNewPlaylist }}</p>
+          <div class="flex-grow" />
+        </div>
+
+        <ui-text-input-with-label v-model="newPlaylistName" :label="$strings.LabelName" />
+        <div class="flex justify-end mt-6">
+          <ui-btn color="success" :loading="processing" class="w-full" @click.stop="submitCreatePlaylist">{{ $strings.ButtonCreate }}</ui-btn>
+        </div>
       </div>
     </div>
-  </modals-modal>
+
+    <!-- playlists list -->
+    <div v-if="!showPlaylistNameInput" class="w-full overflow-y-auto overflow-x-hidden h-full max-h-[calc(100vh-176px)]">
+      <div class="w-full h-full" v-show="!showPlaylistNameInput">
+        <template v-for="playlist in sortedPlaylists">
+          <modals-playlists-playlist-row :key="playlist.id" :in-playlist="playlist.isItemIncluded" :playlist="playlist" @click="clickPlaylist" @close="show = false" />
+        </template>
+        <div v-if="!playlists.length" class="flex h-full items-center justify-center">
+          <p class="text-xl">{{ loading ? $strings.MessageLoading : $strings.MessageNoUserPlaylists }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- create playlist btn -->
+    <div v-if="!showPlaylistNameInput" class="flex items-start justify-between h-20 pt-2 absolute bottom-0 left-0 w-full">
+      <ui-btn :loading="processing" color="success" class="w-full h-14 flex items-center justify-center" @click.stop="createPlaylist">
+        <p class="text-base">{{ $strings.ButtonCreateNewPlaylist }}</p>
+      </ui-btn>
+    </div>
+  </modals-fullscreen-modal>
 </template>
 
 <script>
 export default {
+  props: {
+    libraryItemId: String
+  },
   data() {
     return {
+      showPlaylistNameInput: false,
       newPlaylistName: '',
-      processing: false
+      playlists: [],
+      processing: false,
+      loading: false
     }
   },
   watch: {
     show(newVal) {
       if (newVal) {
-        this.loadPlaylists()
+        this.setListeners()
+        this.showPlaylistNameInput = false
         this.newPlaylistName = ''
+        this.loadPlaylists()
       } else {
-        this.$store.commit('globals/setSelectedPlaylistItems', null)
+        this.unsetListeners()
       }
     }
   },
   computed: {
     show: {
       get() {
-        return this.$store.state.globals.showPlaylistsModal
+        return this.$store.state.globals.showPlaylistsAddCreateModal
       },
       set(val) {
-        this.$store.commit('globals/setShowPlaylistsModal', val)
+        this.$store.commit('globals/setShowPlaylistsAddCreateModal', val)
       }
     },
-    title() {
-      if (!this.selectedPlaylistItems.length) return ''
-      if (this.isBatch) {
-        return this.$getString('MessageItemsSelected', [this.selectedPlaylistItems.length])
-      }
-      const selectedPlaylistItem = this.selectedPlaylistItems[0]
-      if (selectedPlaylistItem.episode) {
-        return selectedPlaylistItem.episode.title
-      }
-      return selectedPlaylistItem.libraryItem.media.metadata.title || ''
+    currentLibraryId() {
+      return this.$store.state.libraries.currentLibraryId
     },
-    playlists() {
-      return this.$store.state.libraries.userPlaylists || []
+    selectedPlaylistItems() {
+      return this.$store.state.globals.selectedPlaylistItems || []
     },
     sortedPlaylists() {
       return this.playlists
@@ -88,15 +98,6 @@ export default {
           }
         })
         .sort((a, b) => (a.isItemIncluded ? -1 : 1))
-    },
-    isBatch() {
-      return this.selectedPlaylistItems.length > 1
-    },
-    selectedPlaylistItems() {
-      return this.$store.state.globals.selectedPlaylistItems || []
-    },
-    currentLibraryId() {
-      return this.$store.state.libraries.currentLibraryId
     }
   },
   methods: {
@@ -107,35 +108,43 @@ export default {
       return playlist.items.some((i) => i.libraryItemId === item.libraryItem.id)
     },
     loadPlaylists() {
-      this.processing = true
-      this.$axios
-        .$get(`/api/libraries/${this.currentLibraryId}/playlists`)
+      this.loading = true
+      this.$nativeHttp
+        .get(`/api/libraries/${this.currentLibraryId}/playlists`)
         .then((data) => {
-          this.$store.commit('libraries/setUserPlaylists', data.results || [])
+          this.playlists = data.results || []
         })
         .catch((error) => {
-          console.error('Failed to get playlists', error)
-          this.$toast.error(this.$strings.ToastFailedToLoadData)
+          console.error('Failed', error)
+          this.$toast.error('Failed to load playlists')
         })
         .finally(() => {
-          this.processing = false
+          this.loading = false
         })
+    },
+    async clickPlaylist(playlist) {
+      await this.$hapticsImpact()
+      if (playlist.isItemIncluded) {
+        this.removeFromPlaylist(playlist)
+      } else {
+        this.addToPlaylist(playlist)
+      }
     },
     removeFromPlaylist(playlist) {
       if (!this.selectedPlaylistItems.length) return
       this.processing = true
 
       const itemObjects = this.selectedPlaylistItems.map((pi) => ({ libraryItemId: pi.libraryItem.id, episodeId: pi.episode ? pi.episode.id : null }))
-      this.$axios
-        .$post(`/api/playlists/${playlist.id}/batch/remove`, { items: itemObjects })
+      this.$nativeHttp
+        .post(`/api/playlists/${playlist.id}/batch/remove`, { items: itemObjects })
         .then((updatedPlaylist) => {
           console.log(`Items removed from playlist`, updatedPlaylist)
-          this.$toast.success(this.$strings.ToastPlaylistUpdateSuccess)
-          this.processing = false
         })
         .catch((error) => {
           console.error('Failed to remove items from playlist', error)
-          this.$toast.error(this.$strings.ToastFailedToUpdate)
+          this.$toast.error('Failed to remove playlist item(s)')
+        })
+        .finally(() => {
           this.processing = false
         })
     },
@@ -144,20 +153,25 @@ export default {
       this.processing = true
 
       const itemObjects = this.selectedPlaylistItems.map((pi) => ({ libraryItemId: pi.libraryItem.id, episodeId: pi.episode ? pi.episode.id : null }))
-      this.$axios
-        .$post(`/api/playlists/${playlist.id}/batch/add`, { items: itemObjects })
+      this.$nativeHttp
+        .post(`/api/playlists/${playlist.id}/batch/add`, { items: itemObjects })
         .then((updatedPlaylist) => {
           console.log(`Items added to playlist`, updatedPlaylist)
-          this.$toast.success(this.$strings.ToastPlaylistUpdateSuccess)
-          this.processing = false
         })
         .catch((error) => {
           console.error('Failed to add items to playlist', error)
-          this.$toast.error(this.$strings.ToastFailedToUpdate)
+          this.$toast.error('Failed to add items to playlist')
+        })
+        .finally(() => {
           this.processing = false
         })
     },
-    submitCreatePlaylist() {
+    createPlaylist() {
+      this.newPlaylistName = ''
+      this.showPlaylistNameInput = true
+    },
+    async submitCreatePlaylist() {
+      await this.$hapticsImpact()
       if (!this.newPlaylistName || !this.selectedPlaylistItems.length) {
         return
       }
@@ -170,20 +184,46 @@ export default {
         name: this.newPlaylistName
       }
 
-      this.$axios
-        .$post('/api/playlists', newPlaylist)
+      this.$nativeHttp
+        .post('/api/playlists', newPlaylist)
         .then((data) => {
           console.log('New playlist created', data)
-          this.$toast.success(this.$strings.ToastPlaylistCreateSuccess + ': ' + data.name)
-          this.processing = false
           this.newPlaylistName = ''
+          this.showPlaylistNameInput = false
         })
         .catch((error) => {
           console.error('Failed to create playlist', error)
-          var errMsg = error.response ? error.response.data || '' : ''
-          this.$toast.error(this.$strings.ToastPlaylistCreateFailed + ': ' + errMsg)
+          this.$toast.error(this.$strings.ToastPlaylistCreateFailed)
+        })
+        .finally(() => {
           this.processing = false
         })
+    },
+    playlistAdded(playlist) {
+      if (!this.playlists.some((p) => p.id === playlist.id)) {
+        this.playlists.push(playlist)
+      }
+    },
+    playlistUpdated(playlist) {
+      const index = this.playlists.findIndex((p) => p.id === playlist.id)
+      if (index >= 0) {
+        this.playlists.splice(index, 1, playlist)
+      } else {
+        this.playlists.push(playlist)
+      }
+    },
+    playlistRemoved(playlist) {
+      this.playlists = this.playlists.filter((p) => p.id !== playlist.id)
+    },
+    setListeners() {
+      this.$socket.$on('playlist_added', this.playlistAdded)
+      this.$socket.$on('playlist_updated', this.playlistUpdated)
+      this.$socket.$on('playlist_removed', this.playlistRemoved)
+    },
+    unsetListeners() {
+      this.$socket.$off('playlist_added', this.playlistAdded)
+      this.$socket.$off('playlist_updated', this.playlistUpdated)
+      this.$socket.$off('playlist_removed', this.playlistRemoved)
     }
   },
   mounted() {}

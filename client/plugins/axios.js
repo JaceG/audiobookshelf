@@ -1,25 +1,32 @@
-export default function ({ $axios, store, $config }) {
-  $axios.onRequest((config) => {
-    if (!config.url) {
-      console.error('Axios request invalid config', config)
+export default function ({ $axios, store }) {
+  $axios.onRequest(config => {
+    console.log('[Axios] Making request to ' + config.url)
+    if (config.url.startsWith('http:') || config.url.startsWith('https:') || config.url.startsWith('capacitor:')) {
       return
     }
-    if (config.url.startsWith('http:') || config.url.startsWith('https:')) {
-      return
+
+    const customHeaders = store.getters['user/getCustomHeaders']
+    if (customHeaders) {
+      for (const key in customHeaders) {
+        config.headers.common[key] = customHeaders[key]
+      }
     }
-    const bearerToken = store.state.user.user?.token || null
+
+    const bearerToken = store.getters['user/getToken']
     if (bearerToken) {
       config.headers.common['Authorization'] = `Bearer ${bearerToken}`
+    } else {
+      console.warn('[Axios] No Bearer Token for request')
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Making request to ' + config.url)
+    const serverUrl = store.getters['user/getServerAddress']
+    if (serverUrl) {
+      config.url = `${serverUrl}${config.url}`
     }
+    console.log('[Axios] Request out', config.url)
   })
 
-  $axios.onError((error) => {
-    const code = parseInt(error.response && error.response.status)
-    const message = error.response ? error.response.data || 'Unknown Error' : 'Unknown Error'
-    console.error('Axios error', code, message)
+  $axios.onError(error => {
+    console.error('Axios error code', error)
   })
 }

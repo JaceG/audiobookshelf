@@ -1,38 +1,48 @@
 <template>
-  <modals-modal v-model="show" name="bookmarks" :width="500" :height="'unset'">
+  <modals-modal v-model="show" :width="400" height="100%">
     <template #outer>
-      <div class="absolute top-0 left-0 p-5 w-2/3 overflow-hidden">
-        <p class="text-3xl text-white truncate">{{ $strings.LabelYourBookmarks }}</p>
+      <div class="absolute top-11 left-4 z-40">
+        <p class="text-white text-2xl truncate">{{ $strings.LabelYourBookmarks }}</p>
       </div>
     </template>
-    <div ref="container" class="w-full rounded-lg bg-bg box-shadow-md overflow-y-auto overflow-x-hidden" style="max-height: 80vh">
-      <div v-if="show" class="w-full h-full">
-        <template v-for="bookmark in bookmarks">
-          <modals-bookmarks-bookmark-item :key="bookmark.id" :highlight="currentTime === bookmark.time" :bookmark="bookmark" @click="clickBookmark" @update="submitUpdateBookmark" @delete="deleteBookmark" />
-        </template>
-        <div v-if="!bookmarks.length" class="flex h-32 items-center justify-center">
-          <p class="text-xl">{{ $strings.MessageNoBookmarks }}</p>
-        </div>
-        <div v-if="!hideCreate" class="w-full h-px bg-white bg-opacity-10" />
-        <form v-if="!hideCreate" @submit.prevent="submitCreateBookmark">
-          <div v-show="canCreateBookmark" class="flex px-4 py-2 items-center text-center border-b border-white border-opacity-10 text-white text-opacity-80">
-            <div class="w-16 max-w-16 text-center">
-              <p class="text-sm font-mono text-gray-400">
-                {{ this.$secondsToTimestamp(currentTime) }}
-              </p>
+    <div class="w-full h-full overflow-hidden absolute top-0 left-0 flex items-center justify-center" @click="show = false">
+      <div ref="container" class="w-full rounded-lg bg-primary border border-border overflow-y-auto overflow-x-hidden" style="max-height: 80vh" @click.stop.prevent>
+        <div class="w-full h-full p-4" v-show="showBookmarkTitleInput">
+          <div class="flex mb-4 items-center">
+            <div class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white hover:bg-opacity-10 cursor-pointer" @click.stop="showBookmarkTitleInput = false">
+              <span class="material-icons text-3xl">arrow_back</span>
             </div>
-            <div class="flex-grow px-2">
-              <ui-text-input v-model="newBookmarkTitle" placeholder="Note" class="w-full" />
-            </div>
-            <ui-btn type="submit" color="success" :padding-x="4" class="h-10"><span class="material-symbols text-2xl -mt-px">add</span></ui-btn>
+            <p class="text-xl pl-2">{{ selectedBookmark ? 'Edit Bookmark' : 'New Bookmark' }}</p>
+            <div class="flex-grow" />
+            <p class="text-xl font-mono">{{ this.$secondsToTimestamp(currentTime) }}</p>
           </div>
-        </form>
+
+          <ui-text-input-with-label v-model="newBookmarkTitle" label="Note" />
+          <div class="flex justify-end mt-6">
+            <ui-btn color="success" class="w-full" @click.stop="submitBookmark">{{ selectedBookmark ? 'Update' : 'Create' }}</ui-btn>
+          </div>
+        </div>
+        <div class="w-full h-full" v-show="!showBookmarkTitleInput">
+          <template v-for="bookmark in bookmarks">
+            <modals-bookmarks-bookmark-item :key="bookmark.id" :highlight="currentTime === bookmark.time" :bookmark="bookmark" @click="clickBookmark" @edit="editBookmark" @delete="deleteBookmark" />
+          </template>
+          <div v-if="!bookmarks.length" class="flex h-32 items-center justify-center">
+            <p class="text-xl">{{ $strings.MessageNoBookmarks }}</p>
+          </div>
+          <div v-show="canCreateBookmark" class="flex px-4 py-2 items-center text-center justify-between border-b border-fg/10 bg-success cursor-pointer text-white text-opacity-80" @click.stop="createBookmark">
+            <span class="material-icons">add</span>
+            <p class="text-base pl-2">{{ $strings.ButtonCreateBookmark }}</p>
+            <p class="text-sm font-mono">{{ this.$secondsToTimestamp(currentTime) }}</p>
+          </div>
+        </div>
       </div>
     </div>
   </modals-modal>
 </template>
 
 <script>
+import { Dialog } from '@capacitor/dialog'
+
 export default {
   props: {
     value: Boolean,
@@ -44,8 +54,7 @@ export default {
       type: Number,
       default: 0
     },
-    libraryItemId: String,
-    hideCreate: Boolean
+    libraryItemId: String
   },
   data() {
     return {
@@ -73,12 +82,6 @@ export default {
     },
     canCreateBookmark() {
       return !this.bookmarks.find((bm) => bm.time === this.currentTime)
-    },
-    dateFormat() {
-      return this.$store.state.serverSettings.dateFormat
-    },
-    timeFormat() {
-      return this.$store.state.serverSettings.timeFormat
     }
   },
   methods: {
@@ -87,46 +90,52 @@ export default {
       this.newBookmarkTitle = bm.title
       this.showBookmarkTitleInput = true
     },
-    deleteBookmark(bm) {
-      this.$axios
-        .$delete(`/api/me/item/${this.libraryItemId}/bookmark/${bm.time}`)
+    async deleteBookmark(bm) {
+      await this.$hapticsImpact()
+      const { value } = await Dialog.confirm({
+        title: 'Remove Bookmark',
+        message: this.$strings.MessageConfirmRemoveBookmark
+      })
+      if (!value) return
+
+      this.$nativeHttp
+        .delete(`/api/me/item/${this.libraryItemId}/bookmark/${bm.time}`)
         .then(() => {
-          this.$toast.success(this.$strings.ToastBookmarkRemoveSuccess)
+          this.$store.commit('user/deleteBookmark', { libraryItemId: this.libraryItemId, time: bm.time })
         })
         .catch((error) => {
-          this.$toast.error(this.$strings.ToastRemoveFailed)
+          this.$toast.error(this.$strings.ToastBookmarkRemoveFailed)
           console.error(error)
         })
-      this.show = false
     },
-    clickBookmark(bm) {
+    async clickBookmark(bm) {
+      await this.$hapticsImpact()
       this.$emit('select', bm)
     },
     submitUpdateBookmark(updatedBookmark) {
-      var bookmark = { ...updatedBookmark }
-      this.$axios
-        .$patch(`/api/me/item/${this.libraryItemId}/bookmark`, bookmark)
-        .then(() => {
-          this.$toast.success(this.$strings.ToastBookmarkUpdateSuccess)
+      this.$nativeHttp
+        .patch(`/api/me/item/${this.libraryItemId}/bookmark`, updatedBookmark)
+        .then((bookmark) => {
+          this.$store.commit('user/updateBookmark', bookmark)
+          this.showBookmarkTitleInput = false
         })
         .catch((error) => {
-          this.$toast.error(this.$strings.ToastFailedToUpdate)
+          this.$toast.error(this.$strings.ToastBookmarkUpdateFailed)
           console.error(error)
         })
-      this.show = false
     },
     submitCreateBookmark() {
       if (!this.newBookmarkTitle) {
-        this.newBookmarkTitle = this.$formatDatetime(Date.now(), this.dateFormat, this.timeFormat)
+        this.newBookmarkTitle = this.$formatDate(Date.now(), 'MMM dd, yyyy HH:mm')
       }
-      var bookmark = {
+      const bookmark = {
         title: this.newBookmarkTitle,
         time: Math.floor(this.currentTime)
       }
-      this.$axios
-        .$post(`/api/me/item/${this.libraryItemId}/bookmark`, bookmark)
+      this.$nativeHttp
+        .post(`/api/me/item/${this.libraryItemId}/bookmark`, bookmark)
         .then(() => {
-          this.$toast.success(this.$strings.ToastBookmarkCreateSuccess)
+          this.$toast.success('Bookmark added')
         })
         .catch((error) => {
           this.$toast.error(this.$strings.ToastBookmarkCreateFailed)
@@ -137,7 +146,25 @@ export default {
       this.showBookmarkTitleInput = false
 
       this.show = false
+    },
+    createBookmark() {
+      this.selectedBookmark = null
+      this.newBookmarkTitle = this.$formatDate(Date.now(), 'MMM dd, yyyy HH:mm')
+      this.showBookmarkTitleInput = true
+    },
+    async submitBookmark() {
+      await this.$hapticsImpact()
+      if (this.selectedBookmark) {
+        var updatePayload = {
+          ...this.selectedBookmark,
+          title: this.newBookmarkTitle
+        }
+        this.submitUpdateBookmark(updatePayload)
+      } else {
+        this.submitCreateBookmark()
+      }
     }
-  }
+  },
+  mounted() {}
 }
 </script>

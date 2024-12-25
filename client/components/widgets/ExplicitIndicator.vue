@@ -1,5 +1,5 @@
 <template>
-  <ui-tooltip :text="$strings.LabelExplicit" direction="top">
+  <div>
     <svg xmlns="http://www.w3.org/2000/svg" width="12px" height="12px" viewBox="0 0 512 512" class="ml-1">
       <path
         fill="white"
@@ -35,12 +35,11 @@
              337.00,164.00 337.00,121.00 337.00,121.00 Z"
       />
     </svg>
-  </ui-tooltip>
+  </div>
 </template>
 
 <script>
 export default {
-  props: {},
   data() {
     return {}
   },

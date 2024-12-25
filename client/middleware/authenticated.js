@@ -1,9 +1,6 @@
-export default function ({ store, redirect, route, app }) {
+export default function ({ store, redirect, route }) {
   // If the user is not authenticated
   if (!store.state.user.user) {
-    if (route.name === 'batch' || route.name === 'index') {
-      return redirect('/login')
-    }
-    return redirect(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return redirect(`/connect?redirect=${route.path}`)
   }
 }

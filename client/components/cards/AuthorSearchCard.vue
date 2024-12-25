@@ -5,7 +5,6 @@
     </div>
     <div class="flex-grow px-2 authorSearchCardContent h-full">
       <p class="truncate text-sm">{{ name }}</p>
-      <p class="text-xs text-gray-400">{{ $getString('LabelXBooks', [numBooks]) }}</p>
     </div>
   </div>
 </template>
@@ -24,9 +23,6 @@ export default {
   computed: {
     name() {
       return this.author.name
-    },
-    numBooks() {
-      return this.author.numBooks
     }
   },
   methods: {},
@@ -36,8 +32,7 @@ export default {
 
 <style>
 .authorSearchCardContent {
-  width: calc(100% - 80px);
-  height: 44px;
+  width: calc(100% - 50px);
   display: flex;
   flex-direction: column;
   justify-content: center;

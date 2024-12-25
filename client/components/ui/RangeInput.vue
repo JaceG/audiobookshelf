@@ -1,8 +1,8 @@
 <template>
   <div class="inline-flex">
-    <input v-model="input" type="range" :min="min" :max="max" :step="step" />
+    <input v-model="input" type="range" :min="min" :max="max" :step="step" :style="{ width: inputWidth }" />
 
-    <p class="text-sm ml-2">{{ input }}%</p>
+    <p class="text-xs ml-2">{{ input }}%</p>
   </div>
 </template>
 
@@ -12,7 +12,11 @@ export default {
     value: [String, Number],
     min: Number,
     max: Number,
-    step: Number
+    step: Number,
+    inputWidth: {
+      type: String,
+      default: 'unset'
+    }
   },
   data() {
     return {}
@@ -45,7 +49,7 @@ input[type='range']:focus {
 
 /* chromium */
 input[type='range']::-webkit-slider-runnable-track {
-  background-color: rgb(0 0 0 / 0.25);
+  background-color: rgb(var(--color-track) / 0.5);
   border-radius: 9999px;
   height: 0.75rem;
 }
@@ -54,19 +58,19 @@ input[type='range']::-webkit-slider-thumb {
   appearance: none;
   margin-top: -0.25rem;
   border-radius: 9999px;
-  background-color: rgb(255 255 255 / 0.7);
+  background-color: rgb(var(--color-track-cursor));
   height: 1.25rem;
   width: 1.25rem;
 }
 input[type='range']:focus::-webkit-slider-thumb {
-  border: 1px solid #6b6b6b;
-  outline: 3px solid #6b6b6b;
+  border: 1px solid rgb(var(--color-track));
+  outline: 3px solid rgb(var(--color-track));
   outline-offset: 0.125rem;
 }
 
 /* firefox */
 input[type='range']::-moz-range-track {
-  background-color: rgb(0 0 0 / 0.25);
+  background-color: rgb(var(--color-track) / 0.5);
   border-radius: 9999px;
   height: 0.75rem;
 }
@@ -74,13 +78,13 @@ input[type='range']::-moz-range-thumb {
   border: none;
   border-radius: 9999px;
   margin-top: -0.25rem;
-  background-color: rgb(255 255 255 / 0.7);
+  background-color: rgb(var(--color-track-cursor));
   height: 1.25rem;
   width: 1.25rem;
 }
 input[type='range']:focus::-moz-range-thumb {
-  border: 1px solid #6b6b6b;
-  outline: 3px solid #6b6b6b;
+  border: 1px solid rgb(var(--color-track));
+  outline: 3px solid rgb(var(--color-track));
   outline-offset: 0.125rem;
 }
 </style>

@@ -1,45 +1,31 @@
 <template>
-  <div id="page-wrapper" class="bg-bg page overflow-hidden" :class="streamLibraryItem ? 'streaming' : ''">
+  <div class="w-full h-full">
     <div class="w-full h-full overflow-y-auto px-2 py-6 md:p-8">
-      <div class="flex flex-col sm:flex-row max-w-6xl mx-auto">
-        <div class="w-full flex justify-center md:block sm:w-32 md:w-52" style="min-width: 240px">
-          <div class="relative" style="height: fit-content">
-            <covers-collection-cover :book-items="bookItems" :width="240" :height="120 * bookCoverAspectRatio" :book-cover-aspect-ratio="bookCoverAspectRatio" />
-          </div>
-        </div>
-        <div class="flex-grow px-2 py-6 md:py-0 md:px-10">
-          <div class="flex items-end flex-row flex-wrap md:flex-nowrap">
-            <h1 class="text-2xl md:text-3xl font-sans w-full md:w-fit mb-4 md:mb-0">
-              {{ collectionName }}
-            </h1>
-            <div class="flex-grow" />
-
-            <ui-btn v-if="showPlayButton" :disabled="streaming" color="success" :padding-x="4" small class="flex items-center h-9 mr-2" @click="clickPlay">
-              <span v-show="!streaming" class="material-symbols fill text-2xl -ml-2 pr-1 text-white">play_arrow</span>
-              {{ streaming ? $strings.ButtonPlaying : $strings.ButtonPlayAll }}
-            </ui-btn>
-
-            <!-- RSS feed -->
-            <ui-tooltip v-if="rssFeed" :text="$strings.LabelOpenRSSFeed" direction="top">
-              <ui-icon-btn icon="rss_feed" class="mx-0.5" :bg-color="rssFeed ? 'success' : 'primary'" outlined @click="showRSSFeedModal" />
-            </ui-tooltip>
-
-            <button type="button" class="h-9 w-9 flex items-center justify-center shadow-sm pl-3 pr-3 text-left focus:outline-none cursor-pointer text-gray-100 hover:text-gray-200 rounded-full hover:bg-white/5 mx-px" @click.stop.prevent="editClick">
-              <span class="material-symbols text-xl">edit</span>
-            </button>
-
-            <ui-context-menu-dropdown :items="contextMenuItems" class="mx-px" @action="contextMenuAction" />
-          </div>
-
-          <div class="my-8 max-w-2xl">
-            <p class="text-base text-gray-100">{{ description }}</p>
-          </div>
-
-          <tables-collection-books-table :books="bookItems" :collection-id="collection.id" />
+      <div class="w-full flex justify-center md:block sm:w-32 md:w-52" style="min-width: 240px">
+        <div class="relative" style="height: fit-content">
+          <covers-collection-cover :book-items="bookItems" :width="240" :height="120 * bookCoverAspectRatio" :book-cover-aspect-ratio="bookCoverAspectRatio" />
         </div>
       </div>
+      <div class="flex-grow py-6">
+        <div class="flex items-center px-2">
+          <h1 class="text-xl font-sans">
+            {{ collectionName }}
+          </h1>
+          <div class="flex-grow" />
+          <ui-btn v-if="showPlayButton" :disabled="streaming" color="success" :padding-x="4" small :loading="playerIsStartingForThisMedia" class="flex items-center justify-center h-9 mr-2 w-24" @click="clickPlay">
+            <span v-show="!streaming" class="material-icons -ml-2 pr-1 text-white">play_arrow</span>
+            {{ streaming ? $strings.ButtonPlaying : $strings.ButtonPlay }}
+          </ui-btn>
+        </div>
+
+        <div class="my-8 max-w-2xl px-2">
+          <p class="text-base text-fg">{{ description }}</p>
+        </div>
+
+        <tables-collection-books-table :books="bookItems" :collection-id="collection.id" />
+      </div>
     </div>
-    <div v-show="processing" class="absolute top-0 left-0 w-full h-full z-10 bg-black bg-opacity-40 flex items-center justify-center">
+    <div v-show="processingRemove" class="absolute top-0 left-0 w-full h-full z-10 bg-black bg-opacity-40 flex items-center justify-center">
       <ui-loading-indicator />
     </div>
   </div>
@@ -49,38 +35,31 @@
 export default {
   async asyncData({ store, params, app, redirect, route }) {
     if (!store.state.user.user) {
-      return redirect(`/login?redirect=${route.path}`)
+      return redirect(`/connect?redirect=${route.path}`)
     }
-    const collection = await app.$axios.$get(`/api/collections/${params.id}?include=rssfeed`).catch((error) => {
+
+    var collection = await app.$nativeHttp.get(`/api/collections/${params.id}`).catch((error) => {
       console.error('Failed', error)
       return false
     })
+
     if (!collection) {
-      return redirect('/')
+      return redirect('/bookshelf')
     }
 
-    // If collection is a different library then set library as current
-    if (collection.libraryId !== store.state.libraries.currentLibraryId) {
-      await store.dispatch('libraries/fetch', collection.libraryId)
-    }
-
-    store.commit('libraries/addUpdateCollection', collection)
     return {
-      collectionId: collection.id,
-      rssFeed: collection.rssFeed || null
+      collection
     }
   },
   data() {
     return {
-      processing: false
+      mediaIdStartingPlayback: null,
+      processingRemove: false
     }
   },
   computed: {
     bookCoverAspectRatio() {
       return this.$store.getters['libraries/getBookCoverAspectRatio']
-    },
-    streamLibraryItem() {
-      return this.$store.state.streamLibraryItem
     },
     bookItems() {
       return this.collection.books || []
@@ -91,167 +70,42 @@ export default {
     description() {
       return this.collection.description || ''
     },
-    collection() {
-      return this.$store.getters['libraries/getCollection'](this.collectionId) || {}
-    },
     playableBooks() {
       return this.bookItems.filter((book) => {
         return !book.isMissing && !book.isInvalid && book.media.tracks.length
       })
     },
     streaming() {
-      return !!this.playableBooks.some((b) => b.id === this.$store.getters['getLibraryItemIdStreaming'])
+      return !!this.playableBooks.find((b) => this.$store.getters['getIsMediaStreaming'](b.id))
+    },
+    playerIsStartingPlayback() {
+      // Play has been pressed and waiting for native play response
+      return this.$store.state.playerIsStartingPlayback
+    },
+    playerIsStartingForThisMedia() {
+      if (!this.mediaIdStartingPlayback) return false
+      const mediaId = this.$store.state.playerStartingPlaybackMediaId
+      return mediaId === this.mediaIdStartingPlayback
     },
     showPlayButton() {
       return this.playableBooks.length
-    },
-    userIsAdminOrUp() {
-      return this.$store.getters['user/getIsAdminOrUp']
-    },
-    userCanUpdate() {
-      return this.$store.getters['user/getUserCanUpdate']
-    },
-    userCanDelete() {
-      return this.$store.getters['user/getUserCanDelete']
-    },
-    contextMenuItems() {
-      const items = [
-        {
-          text: this.$strings.MessagePlaylistCreateFromCollection,
-          action: 'create-playlist'
-        }
-      ]
-      if (this.userIsAdminOrUp || this.rssFeed) {
-        items.push({
-          text: this.$strings.LabelOpenRSSFeed,
-          action: 'open-rss-feed'
-        })
-      }
-      if (this.userCanDelete) {
-        items.push({
-          text: this.$strings.ButtonDelete,
-          action: 'delete'
-        })
-      }
-      return items
     }
   },
   methods: {
-    showRSSFeedModal() {
-      this.$store.commit('globals/setRSSFeedOpenCloseModal', {
-        id: this.collectionId,
-        name: this.collectionName,
-        type: 'collection',
-        feed: this.rssFeed
-      })
-    },
-    contextMenuAction({ action }) {
-      if (action === 'delete') {
-        this.removeClick()
-      } else if (action === 'create-playlist') {
-        this.createPlaylistFromCollection()
-      } else if (action === 'open-rss-feed') {
-        this.showRSSFeedModal()
-      }
-    },
-    createPlaylistFromCollection() {
-      this.processing = true
-      this.$axios
-        .$post(`/api/playlists/collection/${this.collectionId}`)
-        .then((playlist) => {
-          if (playlist) {
-            this.$toast.success(this.$strings.ToastPlaylistCreateSuccess)
-            this.$router.push(`/playlist/${playlist.id}`)
-          }
-        })
-        .catch((error) => {
-          const errMsg = error.response ? error.response.data || '' : ''
-          this.$toast.error(errMsg || this.$strings.ToastPlaylistCreateFailed)
-        })
-        .finally(() => {
-          this.processing = false
-        })
-    },
-    editClick() {
-      this.$store.commit('globals/setEditCollection', this.collection)
-    },
-    removeClick() {
-      if (confirm(this.$getString('MessageConfirmRemoveCollection', [this.collectionName]))) {
-        this.processing = true
-        this.$axios
-          .$delete(`/api/collections/${this.collection.id}`)
-          .then(() => {
-            this.$toast.success(this.$strings.ToastCollectionRemoveSuccess)
-          })
-          .catch((error) => {
-            console.error('Failed to remove collection', error)
-            this.$toast.error(this.$strings.ToastCollectionRemoveFailed)
-          })
-          .finally(() => {
-            this.processing = false
-          })
-      }
-    },
     clickPlay() {
-      const queueItems = []
+      if (this.playerIsStartingPlayback) return
 
-      // Collection queue will start at the first unfinished book
-      //   if all books are finished then entire collection is queued
-      const itemsWithProgress = this.playableBooks.map((item) => {
-        return {
-          ...item,
-          progress: this.$store.getters['user/getUserMediaProgress'](item.id)
-        }
+      var nextBookNotRead = this.playableBooks.find((pb) => {
+        var prog = this.$store.getters['user/getUserMediaProgress'](pb.id)
+        return !prog?.isFinished
       })
-
-      const hasUnfinishedItems = itemsWithProgress.some((i) => !i.progress || !i.progress.isFinished)
-      if (!hasUnfinishedItems) {
-        console.warn('All items in collection are finished - starting at first item')
-      }
-
-      for (let i = 0; i < itemsWithProgress.length; i++) {
-        const libraryItem = itemsWithProgress[i]
-        if (!hasUnfinishedItems || !libraryItem.progress || !libraryItem.progress.isFinished) {
-          queueItems.push({
-            libraryItemId: libraryItem.id,
-            libraryId: libraryItem.libraryId,
-            episodeId: null,
-            title: libraryItem.media.metadata.title,
-            subtitle: libraryItem.media.metadata.authors.map((au) => au.name).join(', '),
-            caption: '',
-            duration: libraryItem.media.duration || null,
-            coverPath: libraryItem.media.coverPath || null
-          })
-        }
-      }
-
-      if (queueItems.length >= 0) {
-        this.$eventBus.$emit('play-item', {
-          libraryItemId: queueItems[0].libraryItemId,
-          queueItems
-        })
-      }
-    },
-    rssFeedOpen(data) {
-      if (data.entityId === this.collectionId) {
-        console.log('RSS Feed Opened', data)
-        this.rssFeed = data
-      }
-    },
-    rssFeedClosed(data) {
-      if (data.entityId === this.collectionId) {
-        console.log('RSS Feed Closed', data)
-        this.rssFeed = null
+      if (nextBookNotRead) {
+        this.mediaIdStartingPlayback = nextBookNotRead.id
+        this.$store.commit('setPlayerIsStartingPlayback', nextBookNotRead.id)
+        this.$eventBus.$emit('play-item', { libraryItemId: nextBookNotRead.id })
       }
     }
   },
-  mounted() {
-    this.$root.socket.on('rss_feed_open', this.rssFeedOpen)
-    this.$root.socket.on('rss_feed_closed', this.rssFeedClosed)
-  },
-  beforeDestroy() {
-    this.$root.socket.off('rss_feed_open', this.rssFeedOpen)
-    this.$root.socket.off('rss_feed_closed', this.rssFeedClosed)
-  }
+  mounted() {}
 }
 </script>

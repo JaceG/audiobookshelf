@@ -1,47 +1,32 @@
 <template>
-  <div class="w-full px-1 md:px-2 py-2 overflow-hidden relative" @mouseover="mouseover" @mouseleave="mouseleave" :class="isHovering ? 'bg-white bg-opacity-5' : ''">
-    <div v-if="item" class="flex h-16 md:h-20">
-      <div class="w-10 min-w-10 md:w-16 md:max-w-16 h-full">
-        <div class="flex h-full items-center justify-center">
-          <span class="material-symbols drag-handle text-lg md:text-xl">menu</span>
+  <div class="w-full px-1.5 pb-1.5">
+    <div class="w-full h-full p-2 rounded-lg relative bg-bg overflow-hidden">
+      <nuxt-link v-if="libraryItem" :to="itemUrl" class="flex items-center w-full">
+        <div class="h-full relative" :style="{ width: '50px' }">
+          <covers-book-cover :library-item="libraryItem" :width="50" :book-cover-aspect-ratio="bookCoverAspectRatio" />
         </div>
-      </div>
-      <div class="h-full relative flex items-center" :style="{ width: coverWidth + 'px', minWidth: coverWidth + 'px', maxWidth: coverWidth + 'px' }">
-        <covers-book-cover :library-item="libraryItem" :width="coverWidth" :book-cover-aspect-ratio="bookCoverAspectRatio" />
-        <div class="absolute top-0 left-0 bg-black bg-opacity-50 flex items-center justify-center h-full w-full z-10" v-show="isHovering && showPlayBtn">
-          <div class="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-40 cursor-pointer" @click="playClick">
-            <span class="material-symbols fill text-2xl">play_arrow</span>
+        <div class="item-table-content h-full px-2 flex items-center">
+          <div class="max-w-full">
+            <p class="truncate block text-sm">{{ itemTitle }} <span v-if="localLibraryItem" class="material-icons text-success text-base align-text-bottom">download_done</span></p>
+            <p v-if="authorName" class="truncate block text-fg-muted text-xs">{{ authorName }}</p>
+            <p class="text-xxs text-fg-muted">{{ itemDuration }}</p>
           </div>
         </div>
-      </div>
-      <div class="flex-grow overflow-hidden max-w-48 md:max-w-md h-full flex items-center px-2 md:px-3">
-        <div>
-          <div class="truncate max-w-48 md:max-w-md">
-            <nuxt-link :to="`/item/${libraryItem.id}`" class="truncate hover:underline text-sm md:text-base">{{ itemTitle }}</nuxt-link>
-          </div>
-          <div class="truncate max-w-48 md:max-w-md text-xs md:text-sm text-gray-300">
-            <template v-for="(author, index) in bookAuthors">
-              <nuxt-link :key="author.id" :to="`/author/${author.id}`" class="truncate hover:underline">{{ author.name }}</nuxt-link
-              ><span :key="author.id + '-comma'" v-if="index < bookAuthors.length - 1">,&nbsp;</span>
-            </template>
-            <nuxt-link v-if="episode" :to="`/item/${libraryItem.id}`" class="truncate hover:underline">{{ mediaMetadata.title }}</nuxt-link>
-          </div>
-          <p class="text-xs md:text-sm text-gray-400">{{ itemDuration }}</p>
+        <div class="w-8 min-w-8 flex justify-center">
+          <button v-if="showPlayBtn" class="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center" @click.stop.prevent="playClick">
+            <span v-if="!playerIsStartingForThisMedia" class="material-icons" :class="streamIsPlaying ? '' : 'text-success'">{{ streamIsPlaying ? 'pause' : 'play_arrow' }}</span>
+            <svg v-else class="animate-spin" style="width: 18px; height: 18px" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z" />
+            </svg>
+          </button>
         </div>
-      </div>
-    </div>
-    <div class="w-40 absolute top-0 -right-24 h-full transform transition-transform" :class="!isHovering ? 'translate-x-0' : translateDistance">
-      <div class="flex h-full items-center">
-        <ui-tooltip :text="userIsFinished ? $strings.MessageMarkAsNotFinished : $strings.MessageMarkAsFinished" direction="top">
-          <ui-read-icon-btn :disabled="isProcessingReadUpdate" :is-read="userIsFinished" borderless class="mx-1 mt-0.5" @click="toggleFinished" />
-        </ui-tooltip>
-        <div v-if="userCanUpdate" class="mx-1" :class="isHovering ? '' : 'ml-6'">
-          <ui-icon-btn icon="edit" borderless @click="clickEdit" />
+        <div class="w-8 min-w-8 flex justify-center">
+          <button class="w-8 h-8 rounded-full flex items-center justify-center" @click.stop.prevent="showMore">
+            <span class="material-icons">more_vert</span>
+          </button>
         </div>
-        <div class="mx-1" :class="isHovering ? '' : 'ml-6'">
-          <ui-icon-btn icon="close" borderless @click="removeClick" />
-        </div>
-      </div>
+      </nuxt-link>
+      <div class="absolute bottom-0 left-0 h-0.5 shadow-sm z-10" :class="userIsFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: progressPercent * 100 + '%' }"></div>
     </div>
   </div>
 </template>
@@ -53,45 +38,42 @@ export default {
     item: {
       type: Object,
       default: () => {}
-    },
-    isDragging: Boolean,
-    bookCoverAspectRatio: Number
+    }
   },
   data() {
-    return {
-      isProcessingReadUpdate: false,
-      processingRemove: false,
-      isHovering: false
-    }
-  },
-  watch: {
-    isDragging: {
-      handler(newVal) {
-        if (newVal) {
-          this.isHovering = false
-        }
-      }
-    }
+    return {}
   },
   computed: {
-    translateDistance() {
-      if (!this.userCanUpdate) return '-translate-x-12'
-      return '-translate-x-24'
+    itemUrl() {
+      if (this.episodeId) return `/item/${this.libraryItem.id}/${this.episodeId}`
+      return `/item/${this.libraryItem.id}`
     },
     libraryItem() {
       return this.item.libraryItem || {}
+    },
+    localLibraryItem() {
+      return this.item.localLibraryItem
     },
     episode() {
       return this.item.episode
     },
     episodeId() {
-      return this.episode ? this.episode.id : null
+      return this.episode?.id || null
+    },
+    localEpisode() {
+      return this.item.localEpisode
     },
     media() {
       return this.libraryItem.media || {}
     },
     mediaMetadata() {
       return this.media.metadata || {}
+    },
+    mediaType() {
+      return this.libraryItem.mediaType
+    },
+    isPodcast() {
+      return this.mediaType === 'podcast'
     },
     tracks() {
       if (this.episode) return []
@@ -105,6 +87,13 @@ export default {
       if (this.episode) return []
       return this.mediaMetadata.authors || []
     },
+    bookAuthorName() {
+      return this.bookAuthors.map((au) => au.name).join(', ')
+    },
+    authorName() {
+      if (this.episode) return this.mediaMetadata.author
+      return this.bookAuthorName
+    },
     itemDuration() {
       if (this.episode) return this.$elapsedPretty(this.episode.duration)
       return this.$elapsedPretty(this.media.duration)
@@ -115,121 +104,88 @@ export default {
     isInvalid() {
       return this.libraryItem.isInvalid
     },
-    isStreaming() {
-      return this.$store.getters['getIsMediaStreaming'](this.libraryItem.id, this.episodeId)
+    bookCoverAspectRatio() {
+      return this.$store.getters['libraries/getBookCoverAspectRatio']
+    },
+    coverWidth() {
+      return 50
     },
     showPlayBtn() {
-      return !this.isMissing && !this.isInvalid && !this.isStreaming && (this.tracks.length || this.episode)
+      return !this.isMissing && !this.isInvalid && (this.tracks.length || this.episode)
     },
-    itemProgress() {
+    isStreaming() {
+      if (this.localLibraryItem && this.localEpisode && this.$store.getters['getIsMediaStreaming'](this.localLibraryItem.id, this.localEpisode.id)) return true
+      return this.$store.getters['getIsMediaStreaming'](this.libraryItem.id, this.episodeId)
+    },
+    streamIsPlaying() {
+      return this.$store.state.playerIsPlaying && this.isStreaming
+    },
+    playerIsStartingPlayback() {
+      // Play has been pressed and waiting for native play response
+      return this.$store.state.playerIsStartingPlayback
+    },
+    playerIsStartingForThisMedia() {
+      const mediaId = this.$store.state.playerStartingPlaybackMediaId
+      if (!mediaId) return false
+
+      let thisMediaId = this.episodeId || this.libraryItem.id
+      return mediaId === thisMediaId
+    },
+    userItemProgress() {
       return this.$store.getters['user/getUserMediaProgress'](this.libraryItem.id, this.episodeId)
     },
     userIsFinished() {
-      return this.itemProgress ? !!this.itemProgress.isFinished : false
+      return !!this.userItemProgress?.isFinished
     },
-    coverSize() {
-      return this.$store.state.globals.isMobile ? 30 : 50
-    },
-    coverWidth() {
-      if (this.bookCoverAspectRatio === 1) return this.coverSize * 1.6
-      return this.coverSize
-    },
-    userCanUpdate() {
-      return this.$store.getters['user/getUserCanUpdate']
-    },
-    userCanDelete() {
-      return this.$store.getters['user/getUserCanDelete']
+    progressPercent() {
+      return Math.max(Math.min(1, this.userItemProgress?.progress || 0), 0)
     }
   },
   methods: {
-    mouseover() {
-      if (this.isDragging) return
-      this.isHovering = true
+    showMore() {
+      const playlistItem = {
+        libraryItem: this.libraryItem,
+        episode: this.episode
+      }
+      if (this.localLibraryItem) {
+        playlistItem.libraryItem.localLibraryItem = this.localLibraryItem
+      }
+      if (this.localEpisode && playlistItem.episode) {
+        playlistItem.episode.localEpisode = this.localEpisode
+      }
+      this.$emit('showMore', playlistItem)
     },
-    mouseleave() {
-      this.isHovering = false
-    },
-    playClick() {
-      let queueItem = null
-      if (this.episode) {
-        queueItem = {
-          libraryItemId: this.libraryItem.id,
-          libraryId: this.libraryItem.libraryId,
-          episodeId: this.episodeId,
-          title: this.itemTitle,
-          subtitle: this.mediaMetadata.title,
-          caption: '',
-          duration: this.media.duration || null,
-          coverPath: this.media.coverPath || null
-        }
+    async playClick() {
+      if (this.playerIsStartingPlayback) return
+
+      await this.$hapticsImpact()
+      let mediaId = this.episodeId || this.libraryItem.id
+      if (this.streamIsPlaying) {
+        this.$eventBus.$emit('pause-item')
+      } else if (this.localLibraryItem) {
+        this.$store.commit('setPlayerIsStartingPlayback', mediaId)
+        this.$eventBus.$emit('play-item', {
+          libraryItemId: this.localLibraryItem.id,
+          episodeId: this.localEpisode?.id,
+          serverLibraryItemId: this.libraryItem.id,
+          serverEpisodeId: this.episodeId
+        })
       } else {
-        queueItem = {
+        this.$store.commit('setPlayerIsStartingPlayback', mediaId)
+        this.$eventBus.$emit('play-item', {
           libraryItemId: this.libraryItem.id,
-          libraryId: this.libraryItem.libraryId,
-          episodeId: null,
-          title: this.itemTitle,
-          subtitle: this.bookAuthors.map((au) => au.name).join(', '),
-          caption: '',
-          duration: this.media.duration || null,
-          coverPath: this.media.coverPath || null
-        }
+          episodeId: this.episodeId
+        })
       }
-
-      this.$eventBus.$emit('play-item', {
-        libraryItemId: this.libraryItem.id,
-        episodeId: this.episodeId,
-        queueItems: [queueItem]
-      })
-    },
-    clickEdit() {
-      this.$emit('edit', this.item)
-    },
-    toggleFinished() {
-      var updatePayload = {
-        isFinished: !this.userIsFinished
-      }
-      this.isProcessingReadUpdate = true
-
-      let routepath = `/api/me/progress/${this.libraryItem.id}`
-      if (this.episodeId) routepath += `/${this.episodeId}`
-
-      this.$axios
-        .$patch(routepath, updatePayload)
-        .then(() => {
-          this.isProcessingReadUpdate = false
-        })
-        .catch((error) => {
-          console.error('Failed', error)
-          this.isProcessingReadUpdate = false
-          this.$toast.error(updatePayload.isFinished ? this.$strings.ToastItemMarkedAsFinishedFailed : this.$strings.ToastItemMarkedAsNotFinishedFailed)
-        })
-    },
-    removeClick() {
-      this.processingRemove = true
-
-      let routepath = `/api/playlists/${this.playlistId}/item/${this.libraryItem.id}`
-      if (this.episodeId) routepath += `/${this.episodeId}`
-
-      this.$axios
-        .$delete(routepath)
-        .then((updatedPlaylist) => {
-          if (!updatedPlaylist.items.length) {
-            console.log(`All items removed so playlist was removed`, updatedPlaylist)
-            this.$toast.success(this.$strings.ToastPlaylistRemoveSuccess)
-          } else {
-            console.log(`Item removed from playlist`, updatedPlaylist)
-            this.$toast.success(this.$strings.ToastPlaylistUpdateSuccess)
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to remove item from playlist', error)
-          this.$toast.error(this.$strings.ToastFailedToUpdate)
-        })
-        .finally(() => {
-          this.processingRemove = false
-        })
     }
   },
   mounted() {}
 }
 </script>
+
+<style>
+.item-table-content {
+  width: calc(100% - 114px);
+  max-width: calc(100% - 114px);
+}
+</style>

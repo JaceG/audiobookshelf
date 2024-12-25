@@ -1,243 +1,200 @@
-import { checkForUpdate, currentVersion } from '@/plugins/version'
-import Vue from 'vue'
-const { Constants } = require('../plugins/constants')
+import { Network } from '@capacitor/network'
+import { AbsAudioPlayer } from '@/plugins/capacitor'
+import { PlayMethod } from '@/plugins/constants'
 
 export const state = () => ({
-  Source: null,
-  versionData: null,
-  serverSettings: null,
-  playbackSessionId: null,
-  streamLibraryItem: null,
-  streamEpisodeId: null,
-  streamIsPlaying: false,
-  playerQueueItems: [],
-  playerQueueAutoPlay: true,
+  deviceData: null,
+  currentPlaybackSession: null,
+  playerIsPlaying: false,
   playerIsFullscreen: false,
-  editModalTab: 'details',
-  editPodcastModalTab: 'details',
-  showEditModal: false,
-  showEReader: false,
+  playerIsStartingPlayback: false, // When pressing play before native play response
+  playerStartingPlaybackMediaId: null,
+  isCasting: false,
+  isCastAvailable: false,
+  attemptingConnection: false,
+  socketConnected: false,
+  networkConnected: false,
+  networkConnectionType: null,
+  isNetworkUnmetered: true,
+  isFirstLoad: true,
+  isFirstAudioLoad: true,
+  hasStoragePermission: false,
+  selectedLibraryItem: null,
+  showReader: false,
   ereaderKeepProgress: false,
   ereaderFileId: null,
-  selectedLibraryItem: null,
-  developerMode: false,
-  processingBatch: false,
-  previousPath: '/',
-  bookshelfBookIds: [],
-  episodeTableEpisodeIds: [],
-  openModal: null,
-  innerModalOpen: false,
+  showSideDrawer: false,
+  isNetworkListenerInit: false,
+  serverSettings: null,
   lastBookshelfScrollData: {},
-  routerBasePath: '/'
+  lastItemScrollData: {}
 })
 
 export const getters = {
+  getCurrentPlaybackSessionId: (state) => {
+    return state.currentPlaybackSession?.id || null
+  },
+  getIsPlayerOpen: (state) => {
+    return !!state.currentPlaybackSession
+  },
+  getIsCurrentSessionLocal: (state) => {
+    return state.currentPlaybackSession?.playMethod == PlayMethod.LOCAL
+  },
+  getIsMediaStreaming: (state) => (libraryItemId, episodeId) => {
+    if (!state.currentPlaybackSession || !libraryItemId) return false
+
+    // Check using local library item id and local episode id
+    const isLocalLibraryItemId = libraryItemId.startsWith('local_')
+    if (isLocalLibraryItemId) {
+      if (state.currentPlaybackSession.localLibraryItem?.id !== libraryItemId) {
+        return false
+      }
+      if (!episodeId) return true
+      return state.currentPlaybackSession.localEpisodeId === episodeId
+    }
+
+    if (state.currentPlaybackSession.libraryItemId !== libraryItemId) {
+      return false
+    }
+    if (!episodeId) return true
+    return state.currentPlaybackSession.episodeId === episodeId
+  },
   getServerSetting: (state) => (key) => {
     if (!state.serverSettings) return null
     return state.serverSettings[key]
   },
-  getLibraryItemIdStreaming: (state) => {
-    return state.streamLibraryItem?.id || null
+  getJumpForwardTime: (state) => {
+    if (!state.deviceData?.deviceSettings) return 10
+    return state.deviceData.deviceSettings.jumpForwardTime || 10
   },
-  getIsStreamingFromDifferentLibrary: (state, getters, rootState) => {
-    if (!state.streamLibraryItem) return false
-    return state.streamLibraryItem.libraryId !== rootState.libraries.currentLibraryId
+  getJumpBackwardsTime: (state) => {
+    if (!state.deviceData?.deviceSettings) return 10
+    return state.deviceData.deviceSettings.jumpBackwardsTime || 10
   },
-  getIsMediaStreaming: (state) => (libraryItemId, episodeId) => {
-    if (!state.streamLibraryItem) return null
-    if (!episodeId) return state.streamLibraryItem.id == libraryItemId
-    return state.streamLibraryItem.id == libraryItemId && state.streamEpisodeId == episodeId
+  getAltViewEnabled: (state) => {
+    if (!state.deviceData?.deviceSettings) return true
+    return state.deviceData.deviceSettings.enableAltView
   },
-  getIsMediaQueued: (state) => (libraryItemId, episodeId) => {
-    return state.playerQueueItems.some((i) => {
-      if (!episodeId) return i.libraryItemId === libraryItemId
-      return i.libraryItemId === libraryItemId && i.episodeId === episodeId
-    })
+  getOrientationLockSetting: (state) => {
+    return state.deviceData?.deviceSettings?.lockOrientation
   },
-  getBookshelfView: (state) => {
-    if (!state.serverSettings || isNaN(state.serverSettings.bookshelfView)) return Constants.BookshelfView.STANDARD
-    return state.serverSettings.bookshelfView
+  getCanDownloadUsingCellular: (state) => {
+    if (!state.deviceData?.deviceSettings?.downloadUsingCellular) return 'ALWAYS'
+    return state.deviceData.deviceSettings.downloadUsingCellular || 'ALWAYS'
   },
-  getHomeBookshelfView: (state) => {
-    if (!state.serverSettings || isNaN(state.serverSettings.homeBookshelfView)) return Constants.BookshelfView.STANDARD
-    return state.serverSettings.homeBookshelfView
+  getCanStreamingUsingCellular: (state) => {
+    if (!state.deviceData?.deviceSettings?.streamingUsingCellular) return 'ALWAYS'
+    return state.deviceData.deviceSettings.streamingUsingCellular || 'ALWAYS'
   }
 }
 
 export const actions = {
-  updateServerSettings({ commit }, payload) {
-    const updatePayload = {
-      ...payload
-    }
-    return this.$axios
-      .$patch('/api/settings', updatePayload)
-      .then((result) => {
-        if (result.serverSettings) {
-          commit('setServerSettings', result.serverSettings)
-        }
-        return result
-      })
-      .catch((error) => {
-        console.error('Failed to update server settings', error)
-        const errorMsg = error.response?.data || 'Unknown error'
-        return {
-          error: errorMsg
-        }
-      })
-  },
-  checkForUpdate({ commit }) {
-    const VERSION_CHECK_BUFF = 1000 * 60 * 5 // 5 minutes
-    var lastVerCheck = localStorage.getItem('lastVerCheck') || 0
-    var savedVersionData = localStorage.getItem('versionData')
-    if (savedVersionData) {
-      try {
-        savedVersionData = JSON.parse(localStorage.getItem('versionData'))
-      } catch (error) {
-        console.error('Failed to parse version data', error)
-        savedVersionData = null
-        localStorage.removeItem('versionData')
-      }
-    }
+  // Listen for network connection
+  async setupNetworkListener({ state, commit }) {
+    if (state.isNetworkListenerInit) return
+    commit('setNetworkListenerInit', true)
 
-    var shouldCheckForUpdate = Date.now() - Number(lastVerCheck) > VERSION_CHECK_BUFF
-    if (!shouldCheckForUpdate && savedVersionData && (savedVersionData.version !== currentVersion || !savedVersionData.releasesToShow)) {
-      // Version mismatch between saved data so check for update anyway
-      shouldCheckForUpdate = true
-    }
+    const status = await Network.getStatus()
+    console.log('Network status', status)
+    commit('setNetworkStatus', status)
 
-    if (shouldCheckForUpdate) {
-      return checkForUpdate()
-        .then((res) => {
-          if (res) {
-            localStorage.setItem('lastVerCheck', Date.now())
-            localStorage.setItem('versionData', JSON.stringify(res))
+    Network.addListener('networkStatusChange', (status) => {
+      console.log('Network status changed', status.connected, status.connectionType)
+      commit('setNetworkStatus', status)
+    })
 
-            commit('setVersionData', res)
-          }
-          return res && res.hasUpdate
-        })
-        .catch((error) => {
-          console.error('Update check failed', error)
-          return false
-        })
-    } else if (savedVersionData) {
-      commit('setVersionData', savedVersionData)
-    }
-    return null
+    AbsAudioPlayer.addListener('onNetworkMeteredChanged', (payload) => {
+      const isUnmetered = payload.value
+      console.log('On network metered changed', isUnmetered)
+      commit('setIsNetworkUnmetered', isUnmetered)
+    })
   }
 }
 
 export const mutations = {
-  setRouterBasePath(state, rbp) {
-    state.routerBasePath = rbp
-  },
-  setSource(state, source) {
-    state.Source = source
-  },
-  setPlayerIsFullscreen(state, val) {
-    state.playerIsFullscreen = val
+  setDeviceData(state, deviceData) {
+    state.deviceData = deviceData
   },
   setLastBookshelfScrollData(state, { scrollTop, path, name }) {
     state.lastBookshelfScrollData[name] = { scrollTop, path }
   },
-  setBookshelfBookIds(state, val) {
-    state.bookshelfBookIds = val || []
+  setLastItemScrollData(state, data) {
+    state.lastItemScrollData = data
   },
-  setEpisodeTableEpisodeIds(state, val) {
-    state.episodeTableEpisodeIds = val || []
+  setPlaybackSession(state, playbackSession) {
+    state.currentPlaybackSession = playbackSession
+
+    state.isCasting = playbackSession?.mediaPlayer === 'cast-player'
   },
-  setPreviousPath(state, val) {
-    state.previousPath = val
+  setMediaPlayer(state, mediaPlayer) {
+    state.isCasting = mediaPlayer === 'cast-player'
   },
-  setVersionData(state, versionData) {
-    state.versionData = versionData
+  setCastAvailable(state, available) {
+    state.isCastAvailable = available
   },
-  setServerSettings(state, settings) {
-    if (!settings) return
-    state.serverSettings = settings
+  setAttemptingConnection(state, val) {
+    state.attemptingConnection = val
   },
-  setPlaybackSessionId(state, playbackSessionId) {
-    state.playbackSessionId = playbackSessionId
+  setPlayerPlaying(state, val) {
+    state.playerIsPlaying = val
   },
-  setMediaPlaying(state, payload) {
-    if (!payload) {
-      state.streamLibraryItem = null
-      state.streamEpisodeId = null
-      state.streamIsPlaying = false
-      state.playerQueueItems = []
+  setPlayerFullscreen(state, val) {
+    state.playerIsFullscreen = val
+  },
+  setPlayerIsStartingPlayback(state, mediaId) {
+    state.playerStartingPlaybackMediaId = mediaId
+    state.playerIsStartingPlayback = true
+  },
+  setPlayerDoneStartingPlayback(state) {
+    state.playerStartingPlaybackMediaId = null
+    state.playerIsStartingPlayback = false
+  },
+  setHasStoragePermission(state, val) {
+    state.hasStoragePermission = val
+  },
+  setIsFirstLoad(state, val) {
+    state.isFirstLoad = val
+  },
+  setIsFirstAudioLoad(state, val) {
+    state.isFirstAudioLoad = val
+  },
+  setSocketConnected(state, val) {
+    state.socketConnected = val
+  },
+  setNetworkListenerInit(state, val) {
+    state.isNetworkListenerInit = val
+  },
+  setNetworkStatus(state, val) {
+    if (val.connectionType !== 'none') {
+      state.networkConnected = true
     } else {
-      state.streamLibraryItem = payload.libraryItem
-      state.streamEpisodeId = payload.episodeId || null
-      state.playerQueueItems = payload.queueItems || []
+      state.networkConnected = false
     }
-  },
-  setIsPlaying(state, isPlaying) {
-    state.streamIsPlaying = isPlaying
-  },
-  setPlayerQueueItems(state, items) {
-    state.playerQueueItems = items || []
-  },
-  removeItemFromQueue(state, item) {
-    state.playerQueueItems = state.playerQueueItems.filter((i) => {
-      if (!i.episodeId) return i.libraryItemId !== item.libraryItemId
-      return i.libraryItemId !== item.libraryItemId || i.episodeId !== item.episodeId
-    })
-  },
-  addItemToQueue(state, item) {
-    const exists = state.playerQueueItems.some((i) => {
-      if (!i.episodeId) return i.libraryItemId === item.libraryItemId
-      return i.libraryItemId === item.libraryItemId && i.episodeId === item.episodeId
-    })
-    if (!exists) {
-      state.playerQueueItems.push(item)
+    if (this.$platform === 'ios') {
+      // Capacitor Network plugin only shows ios device connected if internet access is available.
+      // This fix allows iOS users to use local servers without internet access.
+      state.networkConnected = true
     }
+    state.networkConnectionType = val.connectionType
   },
-  setPlayerQueueAutoPlay(state, autoPlay) {
-    state.playerQueueAutoPlay = !!autoPlay
-    localStorage.setItem('playerQueueAutoPlay', !!autoPlay ? '1' : '0')
+  setIsNetworkUnmetered(state, val) {
+    state.isNetworkUnmetered = val
   },
-  showEditModal(state, libraryItem) {
-    state.editModalTab = 'details'
-    state.selectedLibraryItem = libraryItem
-    state.showEditModal = true
-  },
-  showEditModalOnTab(state, { libraryItem, tab }) {
-    state.editModalTab = tab
-    state.selectedLibraryItem = libraryItem
-    state.showEditModal = true
-  },
-  setEditModalTab(state, tab) {
-    state.editModalTab = tab
-  },
-  setShowEditModal(state, val) {
-    state.showEditModal = val
-  },
-  setEditPodcastModalTab(state, tab) {
-    state.editPodcastModalTab = tab
-  },
-  showEReader(state, { libraryItem, keepProgress, fileId }) {
+  showReader(state, { libraryItem, keepProgress, fileId }) {
     state.selectedLibraryItem = libraryItem
     state.ereaderKeepProgress = keepProgress
     state.ereaderFileId = fileId
 
-    state.showEReader = true
+    state.showReader = true
   },
-  setShowEReader(state, val) {
-    state.showEReader = val
+  setShowReader(state, val) {
+    state.showReader = val
   },
-  setDeveloperMode(state, val) {
-    state.developerMode = val
+  setShowSideDrawer(state, val) {
+    state.showSideDrawer = val
   },
-  setSelectedLibraryItem(state, val) {
-    Vue.set(state, 'selectedLibraryItem', val)
-  },
-  setProcessingBatch(state, val) {
-    state.processingBatch = val
-  },
-  setOpenModal(state, val) {
-    state.openModal = val
-  },
-  setInnerModalOpen(state, val) {
-    state.innerModalOpen = val
+  setServerSettings(state, val) {
+    state.serverSettings = val
+    this.$localStore.setServerSettings(state.serverSettings)
   }
 }

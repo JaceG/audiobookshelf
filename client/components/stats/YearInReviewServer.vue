@@ -1,13 +1,15 @@
 <template>
   <div>
-    <div v-if="processing" role="img" :aria-label="$strings.MessageLoading" class="max-w-[800px] h-80 md:h-[800px] mx-auto flex items-center justify-center">
+    <div v-if="processing" class="max-w-[800px] h-80 md:h-[800px] mx-auto flex items-center justify-center">
       <widgets-loading-spinner />
     </div>
-    <img v-else-if="dataUrl" :src="dataUrl" class="mx-auto" :aria-label="$getString('LabelServerYearReview', [variant + 1])" />
+    <img v-else-if="dataUrl" :src="dataUrl" class="mx-auto" />
   </div>
 </template>
 
 <script>
+import { FileSharer } from '@byteowls/capacitor-filesharer'
+
 export default {
   props: {
     variant: {
@@ -123,8 +125,6 @@ export default {
         ctx.restore()
       }
 
-      const threeColumnTextWidth = 200
-
       ctx.globalAlpha = 1
       ctx.textBaseline = 'middle'
 
@@ -143,33 +143,33 @@ export default {
 
       // Top text
       addText('audiobookshelf', '28px', 'normal', tanColor, '0px', 65, 28)
-      addText(`${this.year} ${this.$strings.StatsYearInReview}`, '18px', 'bold', 'white', '1px', 65, 51)
+      addText(`${this.year} YEAR IN REVIEW`, '18px', 'bold', 'white', '1px', 65, 51)
 
       // Top left box
       createRoundedRect(40, 100, 230, 100)
       ctx.textAlign = 'center'
       addText(this.yearStats.numBooksAdded, '48px', 'bold', 'white', '0px', 155, 140)
-      addText(this.$strings.StatsBooksAdded, '18px', 'normal', tanColor, '0px', 155, 170, threeColumnTextWidth)
+      addText('books added', '18px', 'normal', tanColor, '0px', 155, 170)
 
       // Box top right
       createRoundedRect(285, 100, 230, 100)
       addText(this.yearStats.numAuthorsAdded, '48px', 'bold', 'white', '0px', 400, 140)
-      addText(this.$strings.StatsAuthorsAdded, '18px', 'normal', tanColor, '0px', 400, 170, threeColumnTextWidth)
+      addText('authors added', '18px', 'normal', tanColor, '0px', 400, 170)
 
       // Box bottom left
       createRoundedRect(530, 100, 230, 100)
       addText(this.yearStats.numListeningSessions, '48px', 'bold', 'white', '0px', 645, 140)
-      addText(this.$strings.StatsSessions, '18px', 'normal', tanColor, '1px', 645, 170, threeColumnTextWidth)
+      addText('sessions', '18px', 'normal', tanColor, '1px', 645, 170)
 
       // Text stats
       if (this.yearStats.totalBooksAddedSize) {
-        addText(this.$strings.StatsCollectionGrewTo, '24px', 'normal', tanColor, '0px', canvas.width / 2, 260)
+        addText('Your book collection grew to...', '24px', 'normal', tanColor, '0px', canvas.width / 2, 260)
         addText(this.$bytesPretty(this.yearStats.totalBooksSize), '36px', 'bolder', 'white', '0px', canvas.width / 2, 300)
         addText('+' + this.$bytesPretty(this.yearStats.totalBooksAddedSize), '20px', 'lighter', 'white', '0px', canvas.width / 2, 330)
       }
 
       if (this.yearStats.totalBooksAddedDuration) {
-        addText(this.$strings.StatsTotalDuration, '24px', 'normal', tanColor, '0px', canvas.width / 2, 400)
+        addText('With a total duration of...', '24px', 'normal', tanColor, '0px', canvas.width / 2, 400)
         addText(this.$elapsedPrettyExtended(this.yearStats.totalBooksDuration, true, false), '36px', 'bolder', 'white', '0px', canvas.width / 2, 440)
         addText('+' + this.$elapsedPrettyExtended(this.yearStats.totalBooksAddedDuration, true, false), '20px', 'lighter', 'white', '0px', canvas.width / 2, 470)
       }
@@ -178,7 +178,7 @@ export default {
         // Bottom images
         imgsToAdd = Object.values(imgsToAdd)
         if (imgsToAdd.length > 0) {
-          addText(this.$strings.StatsBooksAdditional, '24px', 'normal', tanColor, '0px', canvas.width / 2, 540)
+          addText('Some additions include...', '24px', 'normal', tanColor, '0px', canvas.width / 2, 540)
 
           for (let i = 0; i < Math.min(5, imgsToAdd.length); i++) {
             let imgToAdd = imgsToAdd[i]
@@ -189,14 +189,14 @@ export default {
         // Text stats
         ctx.textAlign = 'left'
         if (this.yearStats.topAuthors.length) {
-          addText(this.$strings.StatsTopAuthors, '24px', 'normal', tanColor, '1px', 70, 549, 330)
+          addText('TOP AUTHORS', '24px', 'normal', tanColor, '1px', 70, 549)
           for (let i = 0; i < this.yearStats.topAuthors.length; i++) {
             addText(this.yearStats.topAuthors[i].name, '36px', 'bolder', 'white', '0px', 70, 609 + i * 60, 330)
           }
         }
 
         if (this.yearStats.topNarrators.length) {
-          addText(this.$strings.StatsTopNarrators, '24px', 'normal', tanColor, '1px', 430, 549)
+          addText('TOP NARRATORS', '24px', 'normal', tanColor, '1px', 430, 549)
           for (let i = 0; i < this.yearStats.topNarrators.length; i++) {
             addText(this.yearStats.topNarrators[i].name, '36px', 'bolder', 'white', '0px', 430, 609 + i * 60, 330)
           }
@@ -205,14 +205,14 @@ export default {
         // Text stats
         ctx.textAlign = 'left'
         if (this.yearStats.topAuthors.length) {
-          addText(this.$strings.StatsTopAuthors, '24px', 'normal', tanColor, '1px', 70, 549, 330)
+          addText('TOP AUTHORS', '24px', 'normal', tanColor, '1px', 70, 549)
           for (let i = 0; i < this.yearStats.topAuthors.length; i++) {
             addText(this.yearStats.topAuthors[i].name, '36px', 'bolder', 'white', '0px', 70, 609 + i * 60, 330)
           }
         }
 
         if (this.yearStats.topGenres.length) {
-          addText(this.$strings.StatsTopGenres, '24px', 'normal', tanColor, '1px', 430, 549)
+          addText('TOP GENRES', '24px', 'normal', tanColor, '1px', 430, 549)
           for (let i = 0; i < this.yearStats.topGenres.length; i++) {
             addText(this.yearStats.topGenres[i].genre, '36px', 'bolder', 'white', '0px', 430, 609 + i * 60, 330)
           }
@@ -223,40 +223,36 @@ export default {
       this.dataUrl = canvas.toDataURL('png')
     },
     share() {
-      this.canvas.toBlob((blob) => {
-        const file = new File([blob], 'yearinreviewserver.png', { type: blob.type })
-        const shareData = {
-          files: [file]
-        }
-        if (navigator.canShare(shareData)) {
-          navigator
-            .share(shareData)
-            .then(() => {
-              console.log('Share success')
-            })
-            .catch((error) => {
-              console.error('Failed to share', error)
-              if (error.name !== 'AbortError') {
-                this.$toast.error(this.$strings.ToastFailedToShare + ': ' + error.message)
-              }
-            })
-        } else {
-          this.$toast.error(this.$strings.ToastErrorCannotShare)
+      const base64Data = this.dataUrl.split(';base64,').pop()
+      FileSharer.share({
+        filename: `audiobookshelf_server_${this.year}.png`,
+        contentType: 'image/png',
+        base64Data
+      }).catch((error) => {
+        if (error.message !== 'USER_CANCELLED') {
+          console.error('Failed to share', error.message)
+          this.$toast.error('Failed to share: ' + error.message)
         }
       })
     },
     refresh() {
       this.init()
     },
-    async init() {
+    init() {
       this.$emit('update:processing', true)
-      this.yearStats = await this.$axios.$get(`/api/stats/year/${this.year}`).catch((err) => {
-        console.error('Failed to load stats for year', err)
-        this.$toast.error(this.$strings.ToastFailedToLoadData)
-        return null
-      })
-      await this.initCanvas()
-      this.$emit('update:processing', false)
+      this.$nativeHttp
+        .get(`/api/stats/year/${this.year}`)
+        .then((data) => {
+          this.yearStats = data || []
+          return this.initCanvas()
+        })
+        .catch((error) => {
+          console.error('Failed', error)
+          this.$toast.error('Failed to load year stats')
+        })
+        .finally(() => {
+          this.$emit('update:processing', false)
+        })
     }
   },
   mounted() {
